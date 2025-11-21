@@ -7,6 +7,8 @@ import {
   Plus,
   Search,
   Trash2,
+  User,
+  Users,
   X,
 } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
@@ -56,7 +58,7 @@ export default function Customers() {
     null,
   );
   const [formData, setFormData] = useState({
-    id: 0, // Changed back to number
+    id: 0,
     name: '',
     phone: '',
     email: '',
@@ -148,7 +150,7 @@ export default function Customers() {
     } else {
       setEditingItem(null);
       setFormData({
-        id: 0, // Set to 0 for new items
+        id: 0,
         name: '',
         phone: '',
         email: '',
@@ -174,7 +176,6 @@ export default function Customers() {
     try {
       if (activeTab === 'customers') {
         if (editingItem && isCustomer(editingItem)) {
-          // Update existing customer
           await updateCustomer(
             editingItem.id,
             formData.name,
@@ -184,7 +185,6 @@ export default function Customers() {
           );
           Alert.alert('Success', 'Customer updated successfully');
         } else {
-          // Insert new customer - don't pass ID
           await insertCustomer(
             formData.name,
             formData.phone,
@@ -201,7 +201,6 @@ export default function Customers() {
         }
 
         if (editingItem && isSupplier(editingItem)) {
-          // Update existing supplier
           await updateSupplier(
             editingItem.id,
             formData.name,
@@ -213,7 +212,6 @@ export default function Customers() {
           );
           Alert.alert('Success', 'Supplier updated successfully');
         } else {
-          // Insert new supplier - don't pass ID
           await insertSupplier(
             formData.name,
             formData.phone,
@@ -235,7 +233,6 @@ export default function Customers() {
   };
 
   const deleteItem = async (id: number) => {
-    // Changed back to number
     Alert.alert(
       `Delete ${activeTab === 'customers' ? 'Customer' : 'Supplier'}`,
       `Are you sure you want to delete this ${activeTab === 'customers' ? 'customer' : 'supplier'}?`,
@@ -280,7 +277,7 @@ export default function Customers() {
               style={styles.editButton}
               onPress={() => openModal(item)}
             >
-              <Edit size={16} color="#0066CC" />
+              <Edit size={16} color="#2563EB" />
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.deleteButton}
@@ -292,20 +289,20 @@ export default function Customers() {
         </View>
 
         <View style={styles.itemDetail}>
-          <Phone size={14} color="#6B7280" />
+          <Phone size={14} color="#64748B" />
           <Text style={styles.itemDetailText}>{item.phone}</Text>
         </View>
 
         {item.email && (
           <View style={styles.itemDetail}>
-            <Mail size={14} color="#6B7280" />
+            <Mail size={14} color="#64748B" />
             <Text style={styles.itemDetailText}>{item.email}</Text>
           </View>
         )}
 
         {item.address && (
           <View style={styles.itemDetail}>
-            <MapPin size={14} color="#6B7280" />
+            <MapPin size={14} color="#64748B" />
             <Text style={styles.itemDetailText}>{item.address}</Text>
           </View>
         )}
@@ -337,7 +334,7 @@ export default function Customers() {
               style={styles.editButton}
               onPress={() => openModal(item)}
             >
-              <Edit size={16} color="#0066CC" />
+              <Edit size={16} color="#2563EB" />
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.deleteButton}
@@ -349,20 +346,20 @@ export default function Customers() {
         </View>
 
         <View style={styles.itemDetail}>
-          <Phone size={14} color="#6B7280" />
+          <Phone size={14} color="#64748B" />
           <Text style={styles.itemDetailText}>{item.phone}</Text>
         </View>
 
         {item.email && (
           <View style={styles.itemDetail}>
-            <Mail size={14} color="#6B7280" />
+            <Mail size={14} color="#64748B" />
             <Text style={styles.itemDetailText}>{item.email}</Text>
           </View>
         )}
 
         {item.address && (
           <View style={styles.itemDetail}>
-            <MapPin size={14} color="#6B7280" />
+            <MapPin size={14} color="#64748B" />
             <Text style={styles.itemDetailText}>{item.address}</Text>
           </View>
         )}
@@ -383,19 +380,99 @@ export default function Customers() {
 
   return (
     <View style={styles.container}>
-      <StatusBar backgroundColor="#8B5CF6" barStyle="light-content" />
+      <StatusBar backgroundColor="#1E3A8A" barStyle="light-content" />
 
       {/* Header */}
-      <LinearGradient colors={['#8B5CF6', '#7C3AED']} style={styles.header}>
-        <Text style={styles.headerTitle}>
-          {activeTab === 'customers' ? 'Customers' : 'Suppliers'}
-        </Text>
-        <Text style={styles.headerSubtitle}>
-          Manage your {activeTab === 'customers' ? 'customers' : 'suppliers'}
-        </Text>
+      <LinearGradient
+        colors={['#2563EB', '#1D4ED8', '#3730A3']}
+        style={styles.header}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 0 }}
+      >
+        <View style={styles.headerContent}>
+          <Text style={styles.headerTitle}>
+            {activeTab === 'customers'
+              ? 'Manage Your Customers'
+              : 'Manage Your Suppliers'}
+          </Text>
+          <Text style={styles.headerSubtitle}>
+            {activeTab === 'customers'
+              ? 'Customer Management Portal'
+              : 'Supplier Management Portal'}
+          </Text>
+        </View>
       </LinearGradient>
 
       <View style={styles.content}>
+        {/* Stats Cards */}
+        <View style={styles.statsContainer}>
+          <TouchableOpacity
+            style={[
+              styles.statCard,
+              activeTab === 'customers' && styles.activeStatCard,
+            ]}
+            onPress={() => setActiveTab('customers')}
+          >
+            <View style={styles.statIconContainer}>
+              <User
+                size={24}
+                color={activeTab === 'customers' ? '#2563EB' : '#64748B'}
+              />
+            </View>
+            <View style={styles.statInfo}>
+              <Text
+                style={[
+                  styles.statNumber,
+                  activeTab === 'customers' && styles.activeStatNumber,
+                ]}
+              >
+                {customers.length}
+              </Text>
+              <Text
+                style={[
+                  styles.statLabel,
+                  activeTab === 'customers' && styles.activeStatLabel,
+                ]}
+              >
+                Total Customers
+              </Text>
+            </View>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.statCard,
+              activeTab === 'suppliers' && styles.activeStatCard,
+            ]}
+            onPress={() => setActiveTab('suppliers')}
+          >
+            <View style={styles.statIconContainer}>
+              <Users
+                size={24}
+                color={activeTab === 'suppliers' ? '#2563EB' : '#64748B'}
+              />
+            </View>
+            <View style={styles.statInfo}>
+              <Text
+                style={[
+                  styles.statNumber,
+                  activeTab === 'suppliers' && styles.activeStatNumber,
+                ]}
+              >
+                {suppliers.length}
+              </Text>
+              <Text
+                style={[
+                  styles.statLabel,
+                  activeTab === 'suppliers' && styles.activeStatLabel,
+                ]}
+              >
+                Total Suppliers
+              </Text>
+            </View>
+          </TouchableOpacity>
+        </View>
+
         {/* Tabs */}
         <View style={styles.tabsContainer}>
           <TouchableOpacity
@@ -408,7 +485,7 @@ export default function Customers() {
                 activeTab === 'customers' && styles.activeTabText,
               ]}
             >
-              Customers
+              Customers ({customers.length})
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
@@ -421,7 +498,7 @@ export default function Customers() {
                 activeTab === 'suppliers' && styles.activeTabText,
               ]}
             >
-              Suppliers
+              Suppliers ({suppliers.length})
             </Text>
           </TouchableOpacity>
         </View>
@@ -429,10 +506,11 @@ export default function Customers() {
         {/* Search and Add Button */}
         <View style={styles.topSection}>
           <View style={styles.searchContainer}>
-            <Search size={20} color="#6B7280" style={styles.searchIcon} />
+            <Search size={20} color="#64748B" style={styles.searchIcon} />
             <TextInput
               style={styles.searchInput}
-              placeholder={`Search ${activeTab}...`}
+              placeholder={`Search ${activeTab}... (${activeTab === 'customers' ? filteredCustomers.length : filteredSuppliers.length} found)`}
+              placeholderTextColor="#64748B"
               value={searchQuery}
               onChangeText={setSearchQuery}
             />
@@ -442,8 +520,10 @@ export default function Customers() {
             onPress={() => openModal()}
           >
             <LinearGradient
-              colors={['#138808', '#0F6605']}
+              colors={['#10B981', '#059669']}
               style={styles.addButtonGradient}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
             >
               <Plus size={20} color="#FFFFFF" />
             </LinearGradient>
@@ -452,13 +532,35 @@ export default function Customers() {
 
         {/* Conditional Lists */}
         {activeTab === 'customers' ? (
-          <FlatList<Customer>
-            data={filteredCustomers}
-            keyExtractor={(item) => item.id.toString()}
-            renderItem={renderCustomerCard}
-            showsVerticalScrollIndicator={false}
-            style={styles.list}
-          />
+          filteredCustomers.length === 0 ? (
+            <View style={styles.emptyState}>
+              <User size={48} color="#64748B" />
+              <Text style={styles.emptyStateTitle}>No Customers Found</Text>
+              <Text style={styles.emptyStateText}>
+                {searchQuery
+                  ? 'Try a different search term'
+                  : 'Get started by adding your first customer'}
+              </Text>
+            </View>
+          ) : (
+            <FlatList<Customer>
+              data={filteredCustomers}
+              keyExtractor={(item) => item.id.toString()}
+              renderItem={renderCustomerCard}
+              showsVerticalScrollIndicator={false}
+              style={styles.list}
+            />
+          )
+        ) : filteredSuppliers.length === 0 ? (
+          <View style={styles.emptyState}>
+            <Users size={48} color="#64748B" />
+            <Text style={styles.emptyStateTitle}>No Suppliers Found</Text>
+            <Text style={styles.emptyStateText}>
+              {searchQuery
+                ? 'Try a different search term'
+                : 'Get started by adding your first supplier'}
+            </Text>
+          </View>
         ) : (
           <FlatList<Supplier>
             data={filteredSuppliers}
@@ -485,7 +587,7 @@ export default function Customers() {
                 {activeTab === 'customers' ? 'Customer' : 'Supplier'}
               </Text>
               <TouchableOpacity onPress={closeModal}>
-                <X size={24} color="#6B7280" />
+                <X size={24} color="#64748B" />
               </TouchableOpacity>
             </View>
 
@@ -499,6 +601,7 @@ export default function Customers() {
                     setFormData({ ...formData, name: text })
                   }
                   placeholder="Enter name"
+                  placeholderTextColor="#64748B"
                 />
               </View>
 
@@ -511,6 +614,7 @@ export default function Customers() {
                     setFormData({ ...formData, phone: text })
                   }
                   placeholder="Enter phone number"
+                  placeholderTextColor="#64748B"
                   keyboardType="phone-pad"
                 />
               </View>
@@ -524,6 +628,7 @@ export default function Customers() {
                     setFormData({ ...formData, email: text })
                   }
                   placeholder="Enter email"
+                  placeholderTextColor="#64748B"
                   keyboardType="email-address"
                 />
               </View>
@@ -537,6 +642,7 @@ export default function Customers() {
                     setFormData({ ...formData, address: text })
                   }
                   placeholder="Enter address"
+                  placeholderTextColor="#64748B"
                   multiline
                   numberOfLines={3}
                 />
@@ -553,6 +659,7 @@ export default function Customers() {
                         setFormData({ ...formData, company: text })
                       }
                       placeholder="Enter company name"
+                      placeholderTextColor="#64748B"
                     />
                   </View>
 
@@ -567,6 +674,7 @@ export default function Customers() {
                         setFormData({ ...formData, products: text })
                       }
                       placeholder="e.g., Rice, Wheat, Pulses"
+                      placeholderTextColor="#64748B"
                       multiline
                       numberOfLines={2}
                     />
@@ -584,8 +692,10 @@ export default function Customers() {
               </TouchableOpacity>
               <TouchableOpacity style={styles.saveButton} onPress={saveItem}>
                 <LinearGradient
-                  colors={['#138808', '#0F6605']}
+                  colors={['#2563EB', '#1D4ED8']}
                   style={styles.saveButtonGradient}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
                 >
                   <Text style={styles.saveButtonText}>
                     {editingItem ? 'Update' : 'Add'}{' '}
@@ -610,29 +720,96 @@ const styles = StyleSheet.create({
     paddingTop: 50,
     paddingBottom: 20,
     paddingHorizontal: 20,
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  headerContent: {
     alignItems: 'center',
+    justifyContent: 'center',
   },
   headerTitle: {
     fontSize: 24,
     fontWeight: 'bold',
     color: '#FFFFFF',
     marginBottom: 5,
+    textAlign: 'center',
   },
   headerSubtitle: {
     fontSize: 16,
-    color: '#FFFFFF',
+    color: '#E0E7FF',
     opacity: 0.9,
+    textAlign: 'center',
   },
   content: {
     flex: 1,
     paddingHorizontal: 20,
   },
+  statsContainer: {
+    flexDirection: 'row',
+    gap: 12,
+    marginVertical: 20,
+  },
+  statCard: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  activeStatCard: {
+    borderColor: '#2563EB',
+    backgroundColor: '#EFF6FF',
+  },
+  statIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#F1F5F9',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  statInfo: {
+    flex: 1,
+  },
+  statNumber: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#64748B',
+    marginBottom: 2,
+  },
+  activeStatNumber: {
+    color: '#2563EB',
+  },
+  statLabel: {
+    fontSize: 12,
+    color: '#64748B',
+    fontWeight: '500',
+  },
+  activeStatLabel: {
+    color: '#2563EB',
+  },
   tabsContainer: {
     flexDirection: 'row',
     backgroundColor: '#FFFFFF',
-    borderRadius: 12,
+    borderRadius: 20,
     padding: 4,
-    marginVertical: 20,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
@@ -643,15 +820,15 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 12,
     alignItems: 'center',
-    borderRadius: 8,
+    borderRadius: 16,
   },
   activeTab: {
-    backgroundColor: '#8B5CF6',
+    backgroundColor: '#2563EB',
   },
   tabText: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '600',
-    color: '#6B7280',
+    color: '#64748B',
   },
   activeTabText: {
     color: '#FFFFFF',
@@ -667,8 +844,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
-    borderRadius: 12,
+    borderRadius: 20,
     paddingHorizontal: 15,
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
@@ -682,26 +861,53 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 50,
     fontSize: 16,
-    color: '#1F2937',
+    color: '#1E293B',
   },
   addButton: {
-    borderRadius: 12,
+    borderRadius: 20,
     overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
   },
   addButtonGradient: {
     width: 50,
     height: 50,
     justifyContent: 'center',
     alignItems: 'center',
+    borderRadius: 20,
   },
   list: {
     flex: 1,
   },
+  emptyState: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 60,
+  },
+  emptyStateTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#1E293B',
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  emptyStateText: {
+    fontSize: 14,
+    color: '#64748B',
+    textAlign: 'center',
+    paddingHorizontal: 40,
+  },
   itemCard: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 15,
+    borderRadius: 20,
+    padding: 16,
     marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
@@ -715,16 +921,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: 10,
+    marginBottom: 12,
   },
   itemName: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#1F2937',
+    color: '#1E293B',
   },
   companyName: {
     fontSize: 14,
-    color: '#8B5CF6',
+    color: '#2563EB',
     fontWeight: '600',
     marginTop: 2,
   },
@@ -733,63 +939,68 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   editButton: {
-    backgroundColor: '#DBEAFE',
-    borderRadius: 8,
+    backgroundColor: '#EFF6FF',
+    borderRadius: 12,
     width: 32,
     height: 32,
     justifyContent: 'center',
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#DBEAFE',
   },
   deleteButton: {
-    backgroundColor: '#FEE2E2',
-    borderRadius: 8,
+    backgroundColor: '#FEF2F2',
+    borderRadius: 12,
     width: 32,
     height: 32,
     justifyContent: 'center',
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#FECACA',
   },
   itemDetail: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 6,
+    marginBottom: 8,
   },
   itemDetailText: {
     fontSize: 14,
-    color: '#6B7280',
+    color: '#64748B',
     marginLeft: 8,
   },
   customerStats: {
-    marginTop: 10,
-    paddingTop: 10,
+    marginTop: 12,
+    paddingTop: 12,
     borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
+    borderTopColor: '#F1F5F9',
   },
   statText: {
     fontSize: 12,
-    color: '#6B7280',
+    color: '#64748B',
     marginBottom: 2,
   },
   productsContainer: {
-    marginTop: 10,
+    marginTop: 12,
   },
   productsLabel: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#6B7280',
-    marginBottom: 5,
+    color: '#64748B',
+    marginBottom: 6,
   },
   productsTags: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 5,
+    gap: 6,
   },
   productTag: {
     fontSize: 10,
-    backgroundColor: '#EDE9FE',
-    color: '#7C3AED',
+    backgroundColor: '#EFF6FF',
+    color: '#2563EB',
     paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 4,
+    paddingVertical: 4,
+    borderRadius: 8,
+    fontWeight: '500',
   },
   modalOverlay: {
     flex: 1,
@@ -799,10 +1010,17 @@ const styles = StyleSheet.create({
   },
   modalContent: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 16,
+    borderRadius: 24,
     padding: 20,
     width: '90%',
     maxHeight: '80%',
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
   },
   modalHeader: {
     flexDirection: 'row',
@@ -813,7 +1031,7 @@ const styles = StyleSheet.create({
   modalTitle: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: '#1F2937',
+    color: '#1E293B',
   },
   formContainer: {
     maxHeight: 400,
@@ -824,17 +1042,18 @@ const styles = StyleSheet.create({
   inputLabel: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#1F2937',
+    color: '#1E293B',
     marginBottom: 8,
   },
   textInput: {
     borderWidth: 1,
-    borderColor: '#D1D5DB',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    borderColor: '#F1F5F9',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     fontSize: 16,
-    color: '#1F2937',
+    color: '#1E293B',
+    backgroundColor: '#F8FAFC',
   },
   multilineInput: {
     height: 80,
@@ -848,23 +1067,30 @@ const styles = StyleSheet.create({
   },
   cancelButton: {
     flex: 1,
-    backgroundColor: '#F3F4F6',
-    borderRadius: 8,
-    paddingVertical: 12,
+    backgroundColor: '#F1F5F9',
+    borderRadius: 16,
+    paddingVertical: 14,
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
   },
   cancelButtonText: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#6B7280',
+    color: '#64748B',
   },
   saveButton: {
     flex: 1,
-    borderRadius: 8,
+    borderRadius: 16,
     overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
   },
   saveButtonGradient: {
-    paddingVertical: 12,
+    paddingVertical: 14,
     alignItems: 'center',
   },
   saveButtonText: {
