@@ -20,8 +20,6 @@ import {
 import React, { useEffect, useState } from 'react';
 import {
   Alert,
-  Animated,
-  Modal,
   Platform,
   ScrollView,
   StatusBar,
@@ -64,11 +62,7 @@ export default function WholesaleBilling() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [cart, setCart] = useState<CartItem[]>([]);
-  const [billDiscount, setBillDiscount] = useState('');
-
-  // Animation values
-  const fadeAnim = useState(new Animated.Value(0))[0];
-  const slideAnim = useState(new Animated.Value(300))[0];
+  const [billDiscount, setBillDiscount] = useState<string>('');
 
   // Categories from database
   const [categories, setCategories] = useState<string[]>(['All']);
@@ -755,141 +749,8 @@ export default function WholesaleBilling() {
   };
 
   const onDateChange = (event: any, selectedDate?: Date) => {
-    if (Platform.OS === 'android') {
-      setShowDatePicker(false);
-    }
+    setShowDatePicker(Platform.OS === 'ios');
     if (selectedDate) setBillingDate(selectedDate);
-  };
-
-  // Show date picker with animation
-  const showDatePickerWithAnimation = () => {
-    setShowDatePicker(true);
-    if (Platform.OS === 'ios') {
-      Animated.parallel([
-        Animated.timing(fadeAnim, {
-          toValue: 1,
-          duration: 300,
-          useNativeDriver: true,
-        }),
-        Animated.timing(slideAnim, {
-          toValue: 0,
-          duration: 300,
-          useNativeDriver: true,
-        }),
-      ]).start();
-    }
-  };
-
-  // Hide date picker with animation
-  const hideDatePickerWithAnimation = () => {
-    if (Platform.OS === 'ios') {
-      Animated.parallel([
-        Animated.timing(fadeAnim, {
-          toValue: 0,
-          duration: 200,
-          useNativeDriver: true,
-        }),
-        Animated.timing(slideAnim, {
-          toValue: 300,
-          duration: 200,
-          useNativeDriver: true,
-        }),
-      ]).start(() => setShowDatePicker(false));
-    } else {
-      setShowDatePicker(false);
-    }
-  };
-
-  // Custom Date Picker Modal
-  const renderCustomDatePicker = () => {
-    if (showDatePicker && Platform.OS === 'ios') {
-      return (
-        <Modal
-          visible={showDatePicker}
-          transparent={true}
-          animationType="none"
-          onRequestClose={hideDatePickerWithAnimation}
-        >
-          <Animated.View
-            style={[styles.datePickerOverlay, { opacity: fadeAnim }]}
-          >
-            <Animated.View
-              style={[
-                styles.datePickerContainer,
-                { transform: [{ translateY: slideAnim }] },
-              ]}
-            >
-              {/* Header */}
-              <LinearGradient
-                colors={['#2563EB', '#1D4ED8', '#1E40AF']}
-                style={styles.datePickerHeader}
-              >
-                <View style={styles.datePickerHeaderContent}>
-                  <Calendar size={24} color="#FFF" />
-                  <Text style={styles.datePickerTitle}>
-                    Select Billing Date
-                  </Text>
-                </View>
-                <TouchableOpacity
-                  style={styles.datePickerCloseButton}
-                  onPress={hideDatePickerWithAnimation}
-                >
-                  <X size={24} color="#FFF" />
-                </TouchableOpacity>
-              </LinearGradient>
-
-              {/* Date Picker */}
-              <View style={styles.datePickerContent}>
-                <DateTimePicker
-                  value={billingDate}
-                  mode="date"
-                  display="spinner"
-                  onChange={onDateChange}
-                  style={styles.datePicker}
-                  textColor="#1E293B"
-                  themeVariant="light"
-                />
-
-                {/* Selected Date Preview */}
-                <View style={styles.selectedDatePreview}>
-                  <Text style={styles.selectedDateLabel}>Selected Date:</Text>
-                  <Text style={styles.selectedDateText}>
-                    {billingDate.toLocaleDateString('en-US', {
-                      weekday: 'long',
-                      year: 'numeric',
-                      month: 'long',
-                      day: 'numeric',
-                    })}
-                  </Text>
-                </View>
-
-                {/* Action Buttons */}
-                <View style={styles.datePickerActions}>
-                  <TouchableOpacity
-                    style={styles.dateActionButton}
-                    onPress={hideDatePickerWithAnimation}
-                  >
-                    <Text style={styles.dateActionButtonText}>Cancel</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.dateActionButton, styles.confirmButton]}
-                    onPress={hideDatePickerWithAnimation}
-                  >
-                    <LinearGradient
-                      colors={['#2563EB', '#1D4ED8']}
-                      style={styles.confirmButtonGradient}
-                    >
-                      <Text style={styles.confirmButtonText}>Confirm Date</Text>
-                    </LinearGradient>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            </Animated.View>
-          </Animated.View>
-        </Modal>
-      );
-    }
-    return null;
   };
 
   // Render customer item for the dropdown
@@ -906,13 +767,13 @@ export default function WholesaleBilling() {
         <Text style={styles.customerName}>{customer.name}</Text>
         <View style={styles.customerContactRow}>
           <View style={styles.contactInfo}>
-            <Phone size={12} color="#64748B" />
+            <Phone size={12} color="#6B7280" />
             <Text style={styles.customerPhone}>{customer.phone}</Text>
           </View>
         </View>
         {customer.address && customer.address !== 'Address not provided' && (
           <View style={styles.customerAddressRow}>
-            <MapPin size={12} color="#64748B" />
+            <MapPin size={12} color="#6B7280" />
             <Text style={styles.customerAddress} numberOfLines={2}>
               {customer.address}
             </Text>
@@ -920,7 +781,7 @@ export default function WholesaleBilling() {
         )}
         {customer.lastPurchase && (
           <View style={styles.lastPurchaseRow}>
-            <Calendar size={12} color="#64748B" />
+            <Calendar size={12} color="#6B7280" />
             <Text style={styles.lastPurchaseText}>
               {new Date(customer.lastPurchase).toLocaleDateString('en-GB')}
             </Text>
@@ -932,11 +793,11 @@ export default function WholesaleBilling() {
 
   return (
     <View style={styles.container}>
-      <StatusBar backgroundColor="#1E3A8A" barStyle="light-content" />
+      <StatusBar backgroundColor="#2563EB" barStyle="light-content" />
 
-      {/* Header */}
+      {/* Header - Fixed with proper top margin */}
       <LinearGradient
-        colors={['#2563EB', '#1D4ED8', '#3730A3']}
+        colors={['#2563EB', '#1D4ED8']}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 0 }}
         style={styles.headerGradient}
@@ -994,11 +855,11 @@ export default function WholesaleBilling() {
 
           <View style={styles.customerSection}>
             <View style={styles.inputContainer}>
-              <User size={20} color="#64748B" style={styles.inputIcon} />
+              <User size={20} color="#6B7280" style={styles.inputIcon} />
               <TextInput
                 style={styles.customerInput}
                 placeholder="Search or enter customer name"
-                placeholderTextColor="#64748B"
+                placeholderTextColor="#9CA3AF"
                 value={customerName}
                 onChangeText={handleCustomerNameChange}
                 onFocus={handleCustomerInputFocus}
@@ -1080,7 +941,7 @@ export default function WholesaleBilling() {
                   onPress={handleAddNewCustomer}
                 >
                   <View style={styles.newCustomerIcon}>
-                    <Plus size={20} color="#10B981" />
+                    <Plus size={20} color="#059669" />
                   </View>
                   <View style={styles.newCustomerInfo}>
                     <Text style={styles.newCustomerText}>
@@ -1111,65 +972,50 @@ export default function WholesaleBilling() {
           )}
         </View>
 
+        {/* Rest of the component remains the same */}
         {/* Date & Search */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Billing Details</Text>
-
-          {/* Enhanced Date Picker Trigger */}
           <TouchableOpacity
-            style={styles.datePickerTrigger}
-            onPress={showDatePickerWithAnimation}
+            style={styles.datePicker}
+            onPress={() => setShowDatePicker(true)}
           >
             <LinearGradient
-              colors={['#2563EB', '#1D4ED8']}
-              style={styles.dateIconContainer}
+              colors={['#8B5CF6', '#EC4899']}
+              style={styles.dateIcon}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
             >
               <Calendar size={20} color="#FFF" />
             </LinearGradient>
-            <View style={styles.dateTextContent}>
+            <View style={styles.dateTextContainer}>
               <Text style={styles.dateLabel}>Billing Date</Text>
-              <Text style={styles.dateValue}>
-                {billingDate.toLocaleDateString('en-US', {
-                  weekday: 'short',
-                  year: 'numeric',
-                  month: 'short',
-                  day: 'numeric',
-                })}
-              </Text>
+              <Text style={styles.dateText}>{billingDate.toDateString()}</Text>
             </View>
-            <View style={styles.dateChevron}>
-              <ChevronDown size={20} color="#64748B" />
-            </View>
+            <ChevronDown size={20} color="#6B7280" />
           </TouchableOpacity>
 
-          {/* Android Date Picker */}
-          {Platform.OS === 'android' && showDatePicker && (
+          {showDatePicker && (
             <DateTimePicker
               value={billingDate}
               mode="date"
-              display="default"
+              display={Platform.OS === 'ios' ? 'spinner' : 'default'}
               onChange={onDateChange}
             />
           )}
 
-          {/* Custom iOS Date Picker Modal */}
-          {renderCustomDatePicker()}
-
           <View style={styles.searchContainer}>
-            <Search size={20} color="#64748B" />
+            <Search size={20} color="#6B7280" />
             <TextInput
               style={styles.searchInput}
               placeholder="Search products..."
-              placeholderTextColor="#64748B"
+              placeholderTextColor="#9CA3AF"
               value={searchQuery}
               onChangeText={setSearchQuery}
             />
           </View>
         </View>
 
-        {/* Rest of your existing components remain the same */}
         {/* Categories */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>
@@ -1241,12 +1087,10 @@ export default function WholesaleBilling() {
                       <Text style={styles.productCategory}>
                         {product.category}
                       </Text>
-                      <View style={styles.stockContainer}>
-                        <Package size={12} color="#64748B" />
-                        <Text style={styles.productStock}>
-                          {product.stock} {product.unit}
-                        </Text>
-                      </View>
+                      <Text style={styles.productStock}>
+                        <Package size={12} color="#6B7280" /> {product.stock}{' '}
+                        {product.unit}
+                      </Text>
                     </View>
                     <View style={styles.priceContainer}>
                       <View style={styles.priceColumn}>
@@ -1269,7 +1113,7 @@ export default function WholesaleBilling() {
                           }
                           keyboardType="decimal-pad"
                           placeholder={product.sellPrice.toFixed(2)}
-                          placeholderTextColor="#64748B"
+                          placeholderTextColor="#6B7280"
                         />
                       </View>
                       <View style={styles.priceColumn}>
@@ -1286,7 +1130,7 @@ export default function WholesaleBilling() {
                           }
                           keyboardType="decimal-pad"
                           placeholder="0"
-                          placeholderTextColor="#64748B"
+                          placeholderTextColor="#6B7280"
                         />
                       </View>
                     </View>
@@ -1313,7 +1157,7 @@ export default function WholesaleBilling() {
                             updateCart(product, Number(t) || 0)
                           }
                           placeholder="0"
-                          placeholderTextColor="#64748B"
+                          placeholderTextColor="#9CA3AF"
                         />
                       </View>
                       <TouchableOpacity
@@ -1367,7 +1211,7 @@ export default function WholesaleBilling() {
                   }}
                   keyboardType="decimal-pad"
                   placeholder="Enter discount %"
-                  placeholderTextColor="#64748B"
+                  placeholderTextColor="#9CA3AF"
                 />
                 <Text style={styles.percentSymbol}>%</Text>
               </View>
@@ -1377,7 +1221,7 @@ export default function WholesaleBilling() {
           {cart.length === 0 ? (
             <View style={styles.emptyCart}>
               <View style={styles.emptyCartIcon}>
-                <ShoppingCart size={48} color="#64748B" />
+                <ShoppingCart size={48} color="#9CA3AF" />
               </View>
               <Text style={styles.emptyCartText}>Your cart is empty</Text>
               <Text style={styles.emptyCartSubtext}>
@@ -1528,21 +1372,12 @@ export default function WholesaleBilling() {
   );
 }
 
+// Styles remain exactly the same as in your original code
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F8FAFC',
-  },
+  container: { flex: 1, backgroundColor: '#F3F4F6' },
   headerGradient: {
     paddingTop: 50,
     paddingBottom: 16,
-    borderBottomLeftRadius: 24,
-    borderBottomRightRadius: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
   },
   headerContent: {
     flexDirection: 'row',
@@ -1558,8 +1393,6 @@ const styles = StyleSheet.create({
   },
   refreshButton: {
     padding: 8,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    borderRadius: 20,
   },
   headerTitle: {
     fontSize: 22,
@@ -1572,12 +1405,7 @@ const styles = StyleSheet.create({
     color: '#E0E7FF',
     marginTop: 2,
   },
-  cartBadge: {
-    position: 'relative',
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    padding: 8,
-    borderRadius: 20,
-  },
+  cartBadge: { position: 'relative' },
   badge: {
     position: 'absolute',
     top: -8,
@@ -1586,23 +1414,10 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingHorizontal: 5,
     paddingVertical: 2,
-    minWidth: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
-  badgeText: {
-    color: '#FFF',
-    fontSize: 10,
-    fontWeight: '700',
-  },
-  content: {
-    flex: 1,
-    paddingHorizontal: 16,
-  },
-  section: {
-    marginTop: 16,
-    zIndex: 1,
-  },
+  badgeText: { color: '#FFF', fontSize: 10, fontWeight: '700' },
+  content: { flex: 1, paddingHorizontal: 16 },
+  section: { marginTop: 16, zIndex: 1 },
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -1612,7 +1427,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#1E293B',
+    color: '#111827',
   },
   refreshText: {
     fontSize: 12,
@@ -1629,24 +1444,17 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
+    backgroundColor: '#FFF',
+    borderRadius: 8,
     paddingHorizontal: 12,
     borderWidth: 1,
-    borderColor: '#F1F5F9',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    borderColor: '#D1D5DB',
   },
-  inputIcon: {
-    marginRight: 8,
-  },
+  inputIcon: { marginRight: 8 },
   customerInput: {
     flex: 1,
     height: 40,
-    color: '#1E293B',
+    color: '#111827',
     fontSize: 14,
   },
   billTypeButton: {
@@ -1654,19 +1462,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 3,
+    borderRadius: 8,
   },
-  cashActive: {
-    backgroundColor: '#10B981',
-  },
-  creditActive: {
-    backgroundColor: '#F59E0B',
-  },
+  cashActive: { backgroundColor: '#10B981' },
+  creditActive: { backgroundColor: '#F59E0B' },
   billTypeText: {
     color: '#FFF',
     marginLeft: 6,
@@ -1675,16 +1474,11 @@ const styles = StyleSheet.create({
   },
   selectedCustomerInfo: {
     backgroundColor: '#EFF6FF',
-    padding: 16,
-    borderRadius: 20,
+    padding: 12,
+    borderRadius: 8,
     marginTop: 8,
     borderWidth: 2,
     borderColor: '#2563EB',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
   },
   selectedCustomerLabel: {
     fontSize: 12,
@@ -1721,35 +1515,30 @@ const styles = StyleSheet.create({
   statusBanner: {
     backgroundColor: '#FEF3C7',
     padding: 12,
-    borderRadius: 20,
+    borderRadius: 8,
     marginBottom: 8,
-    borderWidth: 1,
-    borderColor: '#F59E0B',
   },
   errorBanner: {
     backgroundColor: '#FEE2E2',
-    borderColor: '#EF4444',
   },
   statusText: {
     fontSize: 12,
     color: '#92400E',
     textAlign: 'center',
-    fontWeight: '500',
   },
   customerDropdown: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
+    backgroundColor: '#FFF',
+    borderRadius: 8,
     marginTop: 4,
     maxHeight: 200,
     borderWidth: 1,
-    borderColor: '#F1F5F9',
+    borderColor: '#E5E7EB',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 5,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 3,
     zIndex: 1001,
-    overflow: 'hidden',
   },
   customerList: {
     maxHeight: 200,
@@ -1759,7 +1548,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     padding: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
+    borderBottomColor: '#F3F4F6',
   },
   customerIcon: {
     width: 32,
@@ -1776,8 +1565,8 @@ const styles = StyleSheet.create({
   },
   customerName: {
     fontSize: 14,
-    fontWeight: '600',
-    color: '#1E293B',
+    fontWeight: '500',
+    color: '#111827',
     marginBottom: 4,
   },
   customerContactRow: {
@@ -1793,8 +1582,21 @@ const styles = StyleSheet.create({
   },
   customerPhone: {
     fontSize: 12,
-    color: '#64748B',
-    fontWeight: '500',
+    color: '#6B7280',
+  },
+  purchaseInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#D1FAE5',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  purchaseText: {
+    fontSize: 10,
+    color: '#059669',
+    fontWeight: '600',
   },
   customerAddressRow: {
     flexDirection: 'row',
@@ -1804,7 +1606,7 @@ const styles = StyleSheet.create({
   },
   customerAddress: {
     fontSize: 11,
-    color: '#64748B',
+    color: '#6B7280',
     flex: 1,
     lineHeight: 14,
   },
@@ -1816,7 +1618,7 @@ const styles = StyleSheet.create({
   },
   lastPurchaseText: {
     fontSize: 10,
-    color: '#64748B',
+    color: '#6B7280',
     fontStyle: 'italic',
   },
   newCustomerItem: {
@@ -1824,9 +1626,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 12,
     backgroundColor: '#F0FDF4',
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: '#10B981',
+    borderRadius: 8,
   },
   newCustomerIcon: {
     width: 32,
@@ -1843,11 +1643,11 @@ const styles = StyleSheet.create({
   newCustomerText: {
     fontSize: 14,
     color: '#059669',
-    fontWeight: '600',
+    fontWeight: '500',
   },
   newCustomerSubtext: {
     fontSize: 11,
-    color: '#64748B',
+    color: '#6B7280',
     marginTop: 2,
   },
   loadingContainer: {
@@ -1856,8 +1656,7 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     fontSize: 14,
-    color: '#64748B',
-    fontWeight: '500',
+    color: '#6B7280',
   },
   noCustomersContainer: {
     padding: 16,
@@ -1865,322 +1664,117 @@ const styles = StyleSheet.create({
   },
   noCustomersText: {
     fontSize: 14,
-    color: '#64748B',
-    fontWeight: '600',
+    color: '#6B7280',
+    fontWeight: '500',
   },
   noCustomersSubtext: {
     fontSize: 12,
-    color: '#64748B',
+    color: '#9CA3AF',
     marginTop: 4,
-    textAlign: 'center',
   },
   emptyState: {
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 40,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    marginTop: 8,
   },
   emptyStateText: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#64748B',
+    color: '#6B7280',
     marginBottom: 8,
   },
   emptyStateSubtext: {
     fontSize: 14,
-    color: '#64748B',
+    color: '#9CA3AF',
     textAlign: 'center',
   },
-
-  // Enhanced Date Picker Styles
-  datePickerTrigger: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    padding: 16,
-    borderRadius: 20,
-    marginTop: 8,
-    borderWidth: 2,
-    borderColor: '#E2E8F0',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  dateIconContainer: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  dateTextContent: {
-    flex: 1,
-  },
-  dateLabel: {
-    fontSize: 12,
-    color: '#64748B',
-    fontWeight: '600',
-    marginBottom: 4,
-  },
-  dateValue: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#1E293B',
-  },
-  dateChevron: {
-    padding: 8,
-    backgroundColor: '#F8FAFC',
-    borderRadius: 12,
-  },
-
-  // Date Picker Modal Styles
-  datePickerOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-end',
-  },
-  datePickerContainer: {
-    backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    maxHeight: '80%',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 12,
-    elevation: 8,
-  },
-  datePickerHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 20,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-  },
-  datePickerHeaderContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  datePickerTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#FFF',
-  },
-  datePickerCloseButton: {
-    padding: 4,
-  },
-  datePickerContent: {
-    padding: 20,
-  },
   datePicker: {
-    height: 200,
-    backgroundColor: '#F8FAFC',
-    borderRadius: 16,
-    marginBottom: 20,
-  },
-  selectedDatePreview: {
-    backgroundColor: '#EFF6FF',
-    padding: 16,
-    borderRadius: 16,
-    borderWidth: 2,
-    borderColor: '#DBEAFE',
-    marginBottom: 20,
-  },
-  selectedDateLabel: {
-    fontSize: 14,
-    color: '#2563EB',
-    fontWeight: '600',
-    marginBottom: 4,
-  },
-  selectedDateText: {
-    fontSize: 16,
-    color: '#1E40AF',
-    fontWeight: '700',
-  },
-  datePickerActions: {
     flexDirection: 'row',
-    gap: 12,
-  },
-  dateActionButton: {
-    flex: 1,
-    paddingVertical: 16,
-    borderRadius: 16,
     alignItems: 'center',
-    borderWidth: 2,
-    borderColor: '#E2E8F0',
+    backgroundColor: '#FFF',
+    padding: 12,
+    borderRadius: 8,
+    marginTop: 8,
   },
-  dateActionButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#64748B',
-  },
-  confirmButton: {
-    borderWidth: 0,
-    overflow: 'hidden',
-  },
-  confirmButtonGradient: {
-    width: '100%',
-    paddingVertical: 16,
+  dateIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
+    marginRight: 12,
   },
-  confirmButtonText: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#FFF',
-  },
-
+  dateTextContainer: { flex: 1 },
+  dateLabel: { fontSize: 12, color: '#6B7280' },
+  dateText: { fontSize: 14, fontWeight: '500', color: '#111827' },
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    paddingHorizontal: 16,
+    backgroundColor: '#FFF',
+    borderRadius: 8,
+    paddingHorizontal: 12,
     paddingVertical: 8,
     marginTop: 8,
-    borderWidth: 1,
-    borderColor: '#F1F5F9',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
   },
-  searchInput: {
-    flex: 1,
-    marginLeft: 8,
-    height: 40,
-    color: '#1E293B',
-    fontSize: 14,
-  },
-  categoryScroll: {
-    flexDirection: 'row',
-    gap: 8,
-  },
+  searchInput: { flex: 1, marginLeft: 8, height: 40, color: '#111827' },
+  categoryScroll: { flexDirection: 'row', gap: 8 },
   categoryBadge: {
-    backgroundColor: '#F1F5F9',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
+    backgroundColor: '#E5E7EB',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
   },
-  categorySelected: {
-    backgroundColor: '#2563EB',
-  },
-  categoryText: {
-    color: '#64748B',
-    fontWeight: '600',
-    fontSize: 12,
-  },
-  categoryTextSelected: {
-    color: '#FFF',
-  },
+  categorySelected: { backgroundColor: '#2563EB' },
+  categoryText: { color: '#374151', fontWeight: '500' },
+  categoryTextSelected: { color: '#FFF' },
   productCard: {
     flexDirection: 'row',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    padding: 16,
+    backgroundColor: '#FFF',
+    borderRadius: 8,
+    padding: 12,
     marginBottom: 8,
-    borderWidth: 1,
-    borderColor: '#F1F5F9',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
   },
-  productInfo: {
-    flex: 1,
-  },
-  productName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1E293B',
-    marginBottom: 4,
-  },
+  productInfo: { flex: 1 },
+  productName: { fontSize: 14, fontWeight: '600', color: '#111827' },
   categoryStockRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginTop: 4,
-    marginBottom: 12,
-    marginRight: 55, // adjust value as needed
   },
-
   productCategory: {
     fontSize: 12,
-    color: '#64748B',
-    fontWeight: '500',
-  },
-  stockContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: '#F8FAFC',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
+    color: '#6B7280',
   },
   productStock: {
     fontSize: 12,
-    color: '#64748B',
-    fontWeight: '500',
+    color: '#6B7280',
+    marginRight: 60,
   },
   priceContainer: {
     flexDirection: 'row',
+    marginTop: 8,
     gap: 12,
     flexWrap: 'wrap',
   },
-  priceColumn: {
-    alignItems: 'flex-start',
-  },
-  priceLabel: {
-    fontSize: 10,
-    color: '#64748B',
-    marginBottom: 4,
-    fontWeight: '500',
-  },
-  productMrp: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#1E293B',
-  },
-  quantityContainer: {
-    width: 100,
-    alignItems: 'center',
-  },
+  priceColumn: {},
+  priceLabel: { fontSize: 10, color: '#6B7280', marginBottom: 4 },
+  productMrp: { fontSize: 12, fontWeight: '600', color: '#111827' },
+  quantityContainer: { width: 100, alignItems: 'center' },
   quantityControls: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
+    marginTop: 15,
   },
   quantityButton: {
     width: 32,
     height: 32,
     backgroundColor: '#2563EB',
-    borderRadius: 16,
+    borderRadius: 6,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 3,
   },
   quantityButtonText: {
     color: '#FFF',
@@ -2195,57 +1789,38 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
     borderWidth: 1,
-    borderColor: '#F1F5F9',
-    borderRadius: 16,
+    borderColor: '#D1D5DB',
+    borderRadius: 6,
     textAlign: 'center',
-    color: '#1E293B',
-    backgroundColor: '#FFFFFF',
+    color: '#111827',
+    backgroundColor: '#FFF',
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: '500',
     padding: 0,
   },
   qtyInputActive: {
     borderColor: '#2563EB',
+    fontWeight: '600',
     backgroundColor: '#EFF6FF',
   },
   qtyLabel: {
     fontSize: 10,
-    color: '#64748B',
+    color: '#6B7280',
     marginTop: 4,
     textAlign: 'center',
-    fontWeight: '500',
-  },
-  rateInput: {
-    borderWidth: 1,
-    borderColor: '#F1F5F9',
-    borderRadius: 12,
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#1E293B',
-    minWidth: 70,
-    textAlign: 'center',
-    backgroundColor: '#FFFFFF',
-  },
-  rateInputModified: {
-    borderColor: '#2563EB',
-    backgroundColor: '#EFF6FF',
-    fontWeight: '700',
-    color: '#1E40AF',
   },
   discountInput: {
     borderWidth: 1,
-    borderColor: '#F1F5F9',
-    borderRadius: 12,
+    borderColor: '#D1D5DB',
+    borderRadius: 4,
     paddingHorizontal: 8,
-    paddingVertical: 6,
+    paddingVertical: 4,
     fontSize: 12,
     fontWeight: '500',
-    color: '#1E293B',
+    color: '#111827',
     minWidth: 50,
     textAlign: 'center',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#FFF',
   },
   discountInputActive: {
     borderColor: '#10B981',
@@ -2254,42 +1829,32 @@ const styles = StyleSheet.create({
     color: '#047857',
   },
   billDiscountSection: {
-    backgroundColor: '#FFFFFF',
-    padding: 16,
-    borderRadius: 20,
+    backgroundColor: '#FFF',
+    padding: 12,
+    borderRadius: 8,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: '#F1F5F9',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    borderColor: '#E5E7EB',
   },
   billDiscountHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 8,
   },
   billDiscountTitle: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#1E293B',
+    color: '#111827',
   },
   applyAllButton: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#10B981',
     paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
+    paddingVertical: 6,
+    borderRadius: 6,
     gap: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 3,
   },
   applyAllText: {
     color: '#FFF',
@@ -2299,70 +1864,45 @@ const styles = StyleSheet.create({
   billDiscountInputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F8FAFC',
-    borderRadius: 20,
-    paddingHorizontal: 16,
+    backgroundColor: '#F9FAFB',
+    borderRadius: 6,
+    paddingHorizontal: 12,
     borderWidth: 1,
-    borderColor: '#F1F5F9',
+    borderColor: '#D1D5DB',
   },
   billDiscountInput: {
     flex: 1,
     height: 40,
-    color: '#1E293B',
+    color: '#111827',
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: '500',
   },
   percentSymbol: {
     fontSize: 14,
-    color: '#64748B',
-    fontWeight: '600',
+    color: '#6B7280',
+    fontWeight: '500',
     marginLeft: 4,
   },
-  emptyCart: {
-    alignItems: 'center',
-    marginTop: 24,
-    padding: 20,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-  },
-  emptyCartIcon: {
-    marginBottom: 12,
-  },
-  emptyCartText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#64748B',
-  },
-  emptyCartSubtext: {
-    fontSize: 12,
-    color: '#64748B',
-    marginTop: 4,
-  },
+  emptyCart: { alignItems: 'center', marginTop: 24 },
+  emptyCartIcon: { marginBottom: 12 },
+  emptyCartText: { fontSize: 16, fontWeight: '600', color: '#6B7280' },
+  emptyCartSubtext: { fontSize: 12, color: '#9CA3AF' },
   cartItem: {
     flexDirection: 'row',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    padding: 16,
+    backgroundColor: '#FFF',
+    borderRadius: 8,
+    padding: 12,
     marginBottom: 8,
-    borderWidth: 1,
-    borderColor: '#F1F5F9',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
   },
-  cartItemInfo: {
-    flex: 1,
-  },
+  cartItemInfo: { flex: 1 },
   cartItemName: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#1E293B',
+    color: '#111827',
     marginBottom: 8,
   },
   cartItemDetails: {
-    marginBottom: 12,
+    marginBottom: 8,
   },
   cartPriceRow: {
     flexDirection: 'row',
@@ -2372,16 +1912,15 @@ const styles = StyleSheet.create({
   },
   cartBasePrice: {
     fontSize: 12,
-    color: '#64748B',
-    fontWeight: '500',
+    color: '#6B7280',
   },
   discountBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#10B981',
     paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
+    paddingVertical: 2,
+    borderRadius: 4,
     gap: 4,
   },
   discountBadgeText: {
@@ -2416,8 +1955,7 @@ const styles = StyleSheet.create({
   },
   cartQuantityLabel: {
     fontSize: 12,
-    color: '#64748B',
-    fontWeight: '500',
+    color: '#6B7280',
   },
   cartQuantityControls: {
     flexDirection: 'row',
@@ -2428,14 +1966,9 @@ const styles = StyleSheet.create({
     width: 28,
     height: 28,
     backgroundColor: '#2563EB',
-    borderRadius: 14,
+    borderRadius: 4,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 3,
   },
   cartQuantityButtonText: {
     color: '#FFF',
@@ -2450,13 +1983,13 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
     borderWidth: 1,
-    borderColor: '#F1F5F9',
-    borderRadius: 14,
+    borderColor: '#D1D5DB',
+    borderRadius: 4,
     textAlign: 'center',
-    color: '#1E293B',
-    backgroundColor: '#FFFFFF',
+    color: '#111827',
+    backgroundColor: '#FFF',
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: '500',
     padding: 0,
   },
   cartTotalContainer: {
@@ -2465,7 +1998,7 @@ const styles = StyleSheet.create({
   cartItemTotal: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#1E293B',
+    color: '#111827',
     minWidth: 60,
     textAlign: 'right',
   },
@@ -2473,33 +2006,23 @@ const styles = StyleSheet.create({
     backgroundColor: '#EF4444',
     width: 32,
     height: 32,
-    borderRadius: 16,
+    borderRadius: 6,
     justifyContent: 'center',
     alignItems: 'center',
     marginLeft: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 3,
   },
   priceSummary: {
     backgroundColor: '#F8FAFC',
-    padding: 20,
-    borderRadius: 20,
+    padding: 16,
+    borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#F1F5F9',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    borderColor: '#E2E8F0',
   },
   summaryRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 8,
   },
   summaryLabel: {
     fontSize: 14,
@@ -2517,34 +2040,53 @@ const styles = StyleSheet.create({
   finalTotalRow: {
     borderTopWidth: 1,
     borderTopColor: '#E2E8F0',
-    paddingTop: 12,
+    paddingTop: 8,
     marginTop: 4,
   },
   finalTotalLabel: {
     fontSize: 16,
-    color: '#1E293B',
+    color: '#111827',
     fontWeight: '700',
   },
   finalTotalValue: {
     fontSize: 18,
-    color: '#1E293B',
+    color: '#111827',
     fontWeight: '700',
   },
+  cartTotal: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
+  },
+  cartTotalText: { fontSize: 16, fontWeight: '700', color: '#111827' },
   generateBtn: {
     backgroundColor: '#2563EB',
     paddingVertical: 16,
-    borderRadius: 20,
+    borderRadius: 8,
     marginVertical: 16,
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
   },
-  generateBtnText: {
-    color: '#FFF',
-    fontSize: 16,
+  generateBtnText: { color: '#FFF', fontSize: 16, fontWeight: '700' },
+  rateInput: {
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    borderRadius: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#111827',
+    minWidth: 70,
+    textAlign: 'center',
+    backgroundColor: '#FFF',
+  },
+  rateInputModified: {
+    borderColor: '#2563EB',
+    backgroundColor: '#EFF6FF',
     fontWeight: '700',
+    color: '#1E40AF',
   },
 });

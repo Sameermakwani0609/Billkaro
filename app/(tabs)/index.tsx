@@ -8,16 +8,14 @@ import {
   Plus,
   Receipt,
   ShoppingCart,
-  TrendingDown,
   TrendingUp,
   Users,
   Zap,
 } from 'lucide-react-native';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef } from 'react';
 import {
   Animated,
   Easing,
-  RefreshControl,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -25,7 +23,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { getTodaysSales } from '../../lib/db';
+
 type QuickAction = {
   title: string;
   icon: React.ComponentType<any>;
@@ -33,19 +31,7 @@ type QuickAction = {
   description: string;
 };
 
-type SalesData = {
-  totalSales: number;
-  trendPercentage: number;
-};
-
 export default function Dashboard() {
-  const [salesData, setSalesData] = useState<SalesData>({
-    totalSales: 0,
-    trendPercentage: 0,
-  });
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-
   const quickActions: QuickAction[] = [
     {
       title: 'New Bill',
@@ -84,16 +70,16 @@ export default function Dashboard() {
       description: 'Analytics & reports',
     },
     {
-      title: 'View Purchases',
+      title: 'Invoices',
       icon: FileText,
-      route: '/ViewPurchaseBillsScreen',
+      route: '/view-pruchase',
       description: 'Manage invoices',
     },
     {
-      title: 'Categorys',
+      title: 'Payments',
       icon: CreditCard,
-      route: '/CategoryManagementScreen',
-      description: 'Category',
+      route: '/payments',
+      description: 'Payment records',
     },
   ];
 
@@ -108,36 +94,6 @@ export default function Dashboard() {
     quickActions.map(() => new Animated.Value(0)),
   ).current;
 
-  // Fetch today's sales data
-  const fetchSalesData = async () => {
-    try {
-      setLoading(true);
-      const data = await getTodaysSales();
-      setSalesData(data);
-    } catch (error) {
-      console.error('Error fetching sales data:', error);
-      setSalesData({ totalSales: 0, trendPercentage: 0 });
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  };
-
-  // Pull to refresh handler
-  const onRefresh = () => {
-    setRefreshing(true);
-    fetchSalesData();
-  };
-
-  useEffect(() => {
-    fetchSalesData();
-
-    // Refresh data every 30 seconds (optional)
-    const interval = setInterval(fetchSalesData, 30000);
-    return () => clearInterval(interval);
-  }, []);
-
-  // Animation effects
   useEffect(() => {
     // Background pulse animation
     Animated.loop(
@@ -265,40 +221,6 @@ export default function Dashboard() {
     outputRange: [0.5, 1],
   });
 
-  // Format currency
-  const formatCurrency = (amount: number) => {
-    return `₹${amount.toLocaleString('en-IN', {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    })}`;
-  };
-
-  // Get trend icon and color
-  const getTrendInfo = () => {
-    if (salesData.trendPercentage > 0) {
-      return {
-        icon: TrendingUp,
-        color: '#10B981',
-        text: `+${salesData.trendPercentage}% from yesterday`,
-      };
-    } else if (salesData.trendPercentage < 0) {
-      return {
-        icon: TrendingDown,
-        color: '#EF4444',
-        text: `${salesData.trendPercentage}% from yesterday`,
-      };
-    } else {
-      return {
-        icon: TrendingUp,
-        color: '#6B7280',
-        text: 'No change from yesterday',
-      };
-    }
-  };
-
-  const trendInfo = getTrendInfo();
-  const TrendIcon = trendInfo.icon;
-
   return (
     <View style={styles.container}>
       <StatusBar backgroundColor="#1E3A8A" barStyle="light-content" />
@@ -351,16 +273,8 @@ export default function Dashboard() {
         style={styles.content}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: 50 }}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            colors={['#1E40AF']}
-            tintColor="#1E40AF"
-          />
-        }
       >
-        {/* TODAY'S SALE - DYNAMIC */}
+        {/* TODAY'S SALE */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Today's Sale</Text>
@@ -375,23 +289,10 @@ export default function Dashboard() {
               <View style={styles.salesContent}>
                 <View style={styles.salesLeft}>
                   <Text style={styles.salesLabel}>TOTAL SALE</Text>
-                  <Text style={styles.salesValue}>
-                    {loading
-                      ? 'Loading...'
-                      : formatCurrency(salesData.totalSales)}
-                  </Text>
-                  <View
-                    style={[
-                      styles.salesTrend,
-                      { backgroundColor: `${trendInfo.color}20` },
-                    ]}
-                  >
-                    <TrendIcon size={16} color={trendInfo.color} />
-                    <Text
-                      style={[styles.trendText, { color: trendInfo.color }]}
-                    >
-                      {trendInfo.text}
-                    </Text>
+                  <Text style={styles.salesValue}>₹12,450</Text>
+                  <View style={styles.salesTrend}>
+                    <TrendingUp size={16} color="#10B981" />
+                    <Text style={styles.trendText}>+12% from yesterday</Text>
                   </View>
                 </View>
                 <View style={styles.salesRight}>
@@ -639,6 +540,7 @@ const styles = StyleSheet.create({
   salesTrend: {
     flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: 'rgba(16, 185, 129, 0.2)',
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 16,
@@ -646,6 +548,7 @@ const styles = StyleSheet.create({
   },
   trendText: {
     fontSize: 13,
+    color: '#10B981',
     fontWeight: '700',
     marginLeft: 6,
   },

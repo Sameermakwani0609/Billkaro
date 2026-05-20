@@ -7,7 +7,7 @@ import {
   Trash2,
   X,
 } from 'lucide-react-native';
-import React, { useEffect, useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Alert,
   Modal,
@@ -20,16 +20,13 @@ import {
   View,
 } from 'react-native';
 import {
-  Category,
   Product,
-  deleteProduct,
-  findExistingProduct,
-  getAllCategories,
   getAllProducts,
-  initDB,
   insertProduct,
-  isSqliteAvailable,
   updateProduct,
+  deleteProduct,
+  initDB,
+  isSqliteAvailable,
 } from '../../lib/db';
 
 export default function Inventory() {
@@ -44,15 +41,13 @@ export default function Inventory() {
     stock: '',
     unit: 'unit',
     category: '',
-    minStock: '10',
+    minStock: '',
   });
 
   const [products, setProducts] = useState<Product[]>([]);
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [dbStatus, setDbStatus] = useState<'checking' | 'ready' | 'error'>(
-    'checking',
-  );
+  const [dbStatus, setDbStatus] = useState<'checking' | 'ready' | 'error'>('checking');
 
+  // Initialize database and load products
   useEffect(() => {
     initializeDatabase();
   }, []);
@@ -67,9 +62,11 @@ export default function Inventory() {
         return;
       }
 
+      // Initialize database
       initDB();
+
+      // Load products
       await loadProducts();
-      await loadCategories();
       setDbStatus('ready');
     } catch (error) {
       console.error('Error initializing database:', error);
@@ -84,15 +81,6 @@ export default function Inventory() {
     } catch (error) {
       console.error('Error loading products:', error);
       Alert.alert('Error', 'Failed to load products');
-    }
-  };
-
-  const loadCategories = async () => {
-    try {
-      const categoriesData = await getAllCategories();
-      setCategories(categoriesData);
-    } catch (error) {
-      console.error('Error loading categories:', error);
     }
   };
 
@@ -128,8 +116,8 @@ export default function Inventory() {
         purchasePrice: '',
         stock: '',
         unit: 'unit',
-        category: categories.length > 0 ? categories[0].name : '',
-        minStock: '10',
+        category: '',
+        minStock: '',
       });
     }
     setModalVisible(true);
@@ -153,18 +141,9 @@ export default function Inventory() {
       return;
     }
 
-    if (
-      isNaN(parseFloat(formData.mrp)) ||
-      isNaN(parseFloat(formData.sellPrice)) ||
-      isNaN(parseFloat(formData.purchasePrice)) ||
-      isNaN(parseInt(formData.stock))
-    ) {
-      Alert.alert('Error', 'Please enter valid numbers for prices and stock');
-      return;
-    }
-
     try {
       if (editingProduct) {
+        // Update existing product
         await updateProduct(
           editingProduct.id,
           formData.name,
@@ -176,55 +155,27 @@ export default function Inventory() {
           formData.category,
           parseInt(formData.minStock) || 10,
         );
-        Alert.alert('Success', 'Product updated successfully');
       } else {
-        const existingProduct = await findExistingProduct(
+        // Insert new product
+        await insertProduct(
           formData.name,
           parseFloat(formData.mrp),
+          parseFloat(formData.sellPrice),
           parseFloat(formData.purchasePrice),
+          parseInt(formData.stock),
+          formData.unit,
           formData.category,
+          parseInt(formData.minStock) || 10,
         );
-
-        if (existingProduct) {
-          const newStock = existingProduct.stock + parseInt(formData.stock);
-          await updateProduct(
-            existingProduct.id,
-            existingProduct.name,
-            existingProduct.mrp,
-            existingProduct.sellPrice,
-            existingProduct.purchasePrice,
-            newStock,
-            existingProduct.unit,
-            existingProduct.category,
-            existingProduct.minStock,
-          );
-          Alert.alert(
-            'Success',
-            `Product quantity updated successfully! New stock: ${newStock}`,
-          );
-        } else {
-          await insertProduct(
-            formData.name,
-            parseFloat(formData.mrp),
-            parseFloat(formData.sellPrice),
-            parseFloat(formData.purchasePrice),
-            parseInt(formData.stock),
-            formData.unit,
-            formData.category,
-            parseInt(formData.minStock) || 10,
-          );
-          Alert.alert('Success', 'Product added successfully');
-        }
       }
 
+      // Reload products from database
       await loadProducts();
       closeModal();
+      Alert.alert('Success', `Product ${editingProduct ? 'updated' : 'added'} successfully`);
     } catch (error) {
       console.error('Error saving product:', error);
-      Alert.alert(
-        'Error',
-        `Failed to ${editingProduct ? 'update' : 'add'} product`,
-      );
+      Alert.alert('Error', `Failed to ${editingProduct ? 'update' : 'add'} product`);
     }
   };
 
@@ -254,31 +205,23 @@ export default function Inventory() {
 
   return (
     <View style={styles.container}>
-      <StatusBar backgroundColor="#1E3A8A" barStyle="light-content" />
+      <StatusBar backgroundColor="#0066CC" barStyle="light-content" />
 
-      <LinearGradient
-        colors={['#2563EB', '#1D4ED8', '#3730A3']}
-        style={styles.header}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 0 }}
-      >
-        <View style={styles.headerContent}>
-          <Text style={styles.headerTitle}>Inventory Management</Text>
-          <Text style={styles.headerSubtitle}>Manage Your Products</Text>
-          <Text style={styles.headerCount}>
-            Total Products: {products.length}
-          </Text>
-        </View>
+      {/* Header */}
+      <LinearGradient colors={['#0066CC', '#0052A3']} style={styles.header}>
+        <Text style={styles.headerTitle}>Inventory Management</Text>
+        <Text style={styles.headerSubtitle}>Manage your products</Text>
+        <Text style={styles.headerSubtitle}>Total Products: {products.length}</Text>
       </LinearGradient>
 
       <View style={styles.content}>
+        {/* Search and Add */}
         <View style={styles.topSection}>
           <View style={styles.searchContainer}>
-            <Search size={20} color="#64748B" style={styles.searchIcon} />
+            <Search size={20} color="#6B7280" style={styles.searchIcon} />
             <TextInput
               style={styles.searchInput}
               placeholder="Search products..."
-              placeholderTextColor="#64748B"
               value={searchQuery}
               onChangeText={setSearchQuery}
             />
@@ -288,26 +231,25 @@ export default function Inventory() {
             onPress={() => openModal()}
           >
             <LinearGradient
-              colors={['#10B981', '#059669']}
+              colors={['#138808', '#0F6605']}
               style={styles.addButtonGradient}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
             >
               <Plus size={20} color="#FFFFFF" />
             </LinearGradient>
           </TouchableOpacity>
         </View>
 
+        {/* Database Status */}
         {dbStatus === 'error' && (
           <View style={styles.errorCard}>
             <Text style={styles.errorTitle}>⚠️ Database Error</Text>
             <Text style={styles.errorText}>
-              Unable to connect to database. Some features may not work
-              properly.
+              Unable to connect to database. Some features may not work properly.
             </Text>
           </View>
         )}
 
+        {/* Low Stock Alert */}
         {lowStockItems.length > 0 && (
           <View style={styles.alertCard}>
             <Text style={styles.alertTitle}>⚠️ Low Stock Alert</Text>
@@ -317,6 +259,7 @@ export default function Inventory() {
           </View>
         )}
 
+        {/* Products List */}
         <ScrollView
           style={styles.productsList}
           showsVerticalScrollIndicator={false}
@@ -327,9 +270,7 @@ export default function Inventory() {
                 {searchQuery ? 'No products found' : 'No products available'}
               </Text>
               <Text style={styles.emptyStateSubtext}>
-                {searchQuery
-                  ? 'Try a different search term'
-                  : 'Add your first product to get started'}
+                {searchQuery ? 'Try a different search term' : 'Add your first product to get started'}
               </Text>
             </View>
           ) : (
@@ -344,17 +285,13 @@ export default function Inventory() {
                 <View style={styles.productInfo}>
                   <View style={styles.productHeader}>
                     <Text style={styles.productName}>{product.name}</Text>
-                    <Text style={styles.productCategory}>
-                      {product.category}
-                    </Text>
+                    <Text style={styles.productCategory}>{product.category}</Text>
                   </View>
                   <View style={styles.productDetails}>
-                    <Text style={styles.normalMrpText}>
-                      MRP: ₹{product.mrp}
-                    </Text>
+                    <Text style={styles.normalMrpText}>MRP: ₹{product.mrp}</Text>
                     <Text
                       style={[
-                        styles.rateText,
+                        styles.sellPriceText,
                         product.sellPrice < product.purchasePrice && {
                           color: '#EF4444',
                         },
@@ -373,7 +310,7 @@ export default function Inventory() {
                     style={styles.editButton}
                     onPress={() => openModal(product)}
                   >
-                    <Edit size={16} color="#2563EB" />
+                    <Edit size={16} color="#0066CC" />
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={styles.deleteButton}
@@ -388,6 +325,7 @@ export default function Inventory() {
         </ScrollView>
       </View>
 
+      {/* Add/Edit Modal */}
       <Modal
         animationType="slide"
         transparent={true}
@@ -401,13 +339,13 @@ export default function Inventory() {
                 {editingProduct ? 'Edit Product' : 'Add New Product'}
               </Text>
               <TouchableOpacity onPress={closeModal}>
-                <X size={24} color="#64748B" />
+                <X size={24} color="#6B7280" />
               </TouchableOpacity>
             </View>
 
             <ScrollView style={styles.formContainer}>
               <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Product Name *</Text>
+                <Text style={styles.inputLabel}>Product Name</Text>
                 <TextInput
                   style={styles.textInput}
                   value={formData.name}
@@ -415,12 +353,11 @@ export default function Inventory() {
                     setFormData({ ...formData, name: text })
                   }
                   placeholder="Enter product name"
-                  placeholderTextColor="#64748B"
                 />
               </View>
 
               <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>MRP (₹) *</Text>
+                <Text style={styles.inputLabel}>MRP (₹)</Text>
                 <TextInput
                   style={styles.textInput}
                   value={formData.mrp}
@@ -428,13 +365,12 @@ export default function Inventory() {
                     setFormData({ ...formData, mrp: text })
                   }
                   placeholder="Enter MRP"
-                  placeholderTextColor="#64748B"
                   keyboardType="numeric"
                 />
               </View>
 
               <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Purchase Price (₹) *</Text>
+                <Text style={styles.inputLabel}>Purchase Price (₹)</Text>
                 <TextInput
                   style={styles.textInput}
                   value={formData.purchasePrice}
@@ -442,13 +378,12 @@ export default function Inventory() {
                     setFormData({ ...formData, purchasePrice: text })
                   }
                   placeholder="Enter purchase price"
-                  placeholderTextColor="#64748B"
                   keyboardType="numeric"
                 />
               </View>
 
               <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Sell Price (₹) *</Text>
+                <Text style={styles.inputLabel}>Sell Price (₹)</Text>
                 <TextInput
                   style={styles.textInput}
                   value={formData.sellPrice}
@@ -456,13 +391,12 @@ export default function Inventory() {
                     setFormData({ ...formData, sellPrice: text })
                   }
                   placeholder="Enter sell price"
-                  placeholderTextColor="#64748B"
                   keyboardType="numeric"
                 />
               </View>
 
               <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Stock Quantity *</Text>
+                <Text style={styles.inputLabel}>Stock Quantity</Text>
                 <TextInput
                   style={styles.textInput}
                   value={formData.stock}
@@ -470,7 +404,6 @@ export default function Inventory() {
                     setFormData({ ...formData, stock: text })
                   }
                   placeholder="Enter stock quantity"
-                  placeholderTextColor="#64748B"
                   keyboardType="numeric"
                 />
               </View>
@@ -495,26 +428,15 @@ export default function Inventory() {
               </View>
 
               <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Category *</Text>
-                <Picker
-                  selectedValue={formData.category}
-                  style={styles.picker}
-                  onValueChange={(itemValue: string) =>
-                    setFormData({ ...formData, category: itemValue })
+                <Text style={styles.inputLabel}>Category</Text>
+                <TextInput
+                  style={styles.textInput}
+                  value={formData.category}
+                  onChangeText={(text) =>
+                    setFormData({ ...formData, category: text })
                   }
-                >
-                  {categories.length === 0 ? (
-                    <Picker.Item label="No categories available" value="" />
-                  ) : (
-                    categories.map((category) => (
-                      <Picker.Item
-                        key={category.id}
-                        label={category.name}
-                        value={category.name}
-                      />
-                    ))
-                  )}
-                </Picker>
+                  placeholder="Enter category"
+                />
               </View>
 
               <View style={styles.inputGroup}>
@@ -526,7 +448,6 @@ export default function Inventory() {
                     setFormData({ ...formData, minStock: text })
                   }
                   placeholder="Enter minimum stock level"
-                  placeholderTextColor="#64748B"
                   keyboardType="numeric"
                 />
               </View>
@@ -541,10 +462,8 @@ export default function Inventory() {
               </TouchableOpacity>
               <TouchableOpacity style={styles.saveButton} onPress={saveProduct}>
                 <LinearGradient
-                  colors={['#2563EB', '#1D4ED8']}
+                  colors={['#138808', '#0F6605']}
                   style={styles.saveButtonGradient}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 0 }}
                 >
                   <Text style={styles.saveButtonText}>
                     {editingProduct ? 'Update' : 'Add'} Product
@@ -560,49 +479,16 @@ export default function Inventory() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F8FAFC',
-  },
+  container: { flex: 1, backgroundColor: '#F8FAFC' },
   header: {
     paddingTop: 50,
     paddingBottom: 20,
     paddingHorizontal: 20,
-    borderBottomLeftRadius: 24,
-    borderBottomRightRadius: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
-  },
-  headerContent: {
     alignItems: 'center',
-    justifyContent: 'center',
   },
-  headerTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
-    textAlign: 'center',
-  },
-  headerSubtitle: {
-    fontSize: 16,
-    color: '#E0E7FF',
-    marginTop: 4,
-    textAlign: 'center',
-  },
-  headerCount: {
-    fontSize: 14,
-    color: '#E0E7FF',
-    opacity: 0.9,
-    marginTop: 4,
-    textAlign: 'center',
-  },
-  content: {
-    flex: 1,
-    paddingHorizontal: 20,
-  },
+  headerTitle: { fontSize: 24, fontWeight: 'bold', color: '#FFFFFF' },
+  headerSubtitle: { fontSize: 14, color: '#FFFFFF', opacity: 0.9, marginTop: 4 },
+  content: { flex: 1, paddingHorizontal: 20 },
   topSection: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -614,94 +500,40 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
-    borderRadius: 20,
+    borderRadius: 12,
     paddingHorizontal: 15,
-    borderWidth: 1,
-    borderColor: '#F1F5F9',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
     elevation: 3,
   },
-  searchIcon: {
-    marginRight: 10,
-  },
-  searchInput: {
-    flex: 1,
-    height: 50,
-    fontSize: 16,
-    color: '#1E293B',
-  },
-  addButton: {
-    borderRadius: 20,
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 3,
-  },
+  searchIcon: { marginRight: 10 },
+  searchInput: { flex: 1, height: 50, fontSize: 16, color: '#1F2937' },
+  addButton: { borderRadius: 12, overflow: 'hidden' },
   addButtonGradient: {
     width: 50,
     height: 50,
     justifyContent: 'center',
     alignItems: 'center',
-    borderRadius: 20,
   },
   errorCard: {
-    backgroundColor: '#FEF2F2',
-    borderRadius: 20,
-    padding: 16,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#FECACA',
+    backgroundColor: '#FEE2E2',
+    borderRadius: 12,
+    padding: 15,
+    marginBottom: 20,
     borderLeftWidth: 4,
     borderLeftColor: '#EF4444',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
   },
-  errorTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#DC2626',
-    marginBottom: 4,
-  },
-  errorText: {
-    fontSize: 14,
-    color: '#DC2626',
-  },
+  errorTitle: { fontSize: 16, fontWeight: 'bold', color: '#DC2626' },
+  errorText: { fontSize: 14, color: '#DC2626' },
   alertCard: {
-    backgroundColor: '#F0FDF4',
-    borderRadius: 20,
-    padding: 16,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#BBF7D0',
+    backgroundColor: '#FEF3C7',
+    borderRadius: 12,
+    padding: 15,
+    marginBottom: 20,
     borderLeftWidth: 4,
-    borderLeftColor: '#10B981',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    borderLeftColor: '#F59E0B',
   },
-  alertTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#065F46',
-    marginBottom: 4,
-  },
-  alertText: {
-    fontSize: 14,
-    color: '#065F46',
-  },
-  productsList: {
-    flex: 1,
-  },
+  alertTitle: { fontSize: 16, fontWeight: 'bold', color: '#92400E' },
+  alertText: { fontSize: 14, color: '#92400E' },
+  productsList: { flex: 1 },
   emptyState: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -710,28 +542,22 @@ const styles = StyleSheet.create({
   emptyStateText: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#64748B',
+    color: '#6B7280',
     marginBottom: 8,
   },
   emptyStateSubtext: {
     fontSize: 14,
-    color: '#94A3B8',
+    color: '#9CA3AF',
     textAlign: 'center',
   },
   productCard: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    padding: 16,
+    borderRadius: 12,
+    padding: 15,
     marginBottom: 12,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#F1F5F9',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
     elevation: 3,
   },
   lowStockCard: {
@@ -739,88 +565,51 @@ const styles = StyleSheet.create({
     borderLeftColor: '#EF4444',
     backgroundColor: '#FEF2F2',
   },
-  productInfo: {
-    flex: 1,
-  },
-  productHeader: {
-    marginBottom: 8,
-  },
-  productName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1E293B',
-  },
+  productInfo: { flex: 1 },
+  productHeader: { marginBottom: 8 },
+  productName: { fontSize: 16, fontWeight: '600', color: '#1F2937' },
   productCategory: {
     fontSize: 12,
-    color: '#64748B',
-    backgroundColor: '#F1F5F9',
+    color: '#6B7280',
+    backgroundColor: '#F3F4F6',
     paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
+    paddingVertical: 2,
+    borderRadius: 6,
     alignSelf: 'flex-start',
-    marginTop: 4,
   },
-  productDetails: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    flexWrap: 'wrap',
-  },
-  normalMrpText: {
-    fontSize: 14,
-    color: '#64748B',
-  },
-  rateText: {
-    fontSize: 14,
-    color: '#2563EB',
-  },
-  stockText: {
-    fontSize: 14,
-    color: '#64748B',
-  },
-  actionButtons: {
-    flexDirection: 'row',
-    gap: 10,
-  },
+  productDetails: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  normalMrpText: { fontSize: 14, color: '#6B7280' },
+  sellPriceText: { fontSize: 18, fontWeight: 'bold', color: '#FF9933' },
+  stockText: { fontSize: 14, color: '#6B7280' },
+  actionButtons: { flexDirection: 'row', gap: 10 },
   editButton: {
-    backgroundColor: '#EFF6FF',
-    borderRadius: 12,
+    backgroundColor: '#DBEAFE',
+    borderRadius: 8,
     width: 36,
     height: 36,
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#DBEAFE',
   },
   deleteButton: {
-    backgroundColor: '#FEF2F2',
-    borderRadius: 12,
+    backgroundColor: '#FEE2E2',
+    borderRadius: 8,
     width: 36,
     height: 36,
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#FECACA',
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'center',
     alignItems: 'center',
   },
   modalContent: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 24,
+    borderRadius: 16,
     padding: 20,
     width: '90%',
     maxHeight: '80%',
-    borderWidth: 1,
-    borderColor: '#F1F5F9',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
   },
   modalHeader: {
     flexDirection: 'row',
@@ -828,78 +617,49 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 20,
   },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#1E293B',
-  },
-  formContainer: {
-    maxHeight: 400,
-  },
-  inputGroup: {
-    marginBottom: 20,
-  },
+  modalTitle: { fontSize: 20, fontWeight: 'bold', color: '#1F2937' },
+  formContainer: { maxHeight: 400 },
+  inputGroup: { marginBottom: 20 },
   inputLabel: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#1E293B',
+    color: '#1F2937',
     marginBottom: 8,
   },
   textInput: {
     borderWidth: 1,
-    borderColor: '#F1F5F9',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    borderColor: '#D1D5DB',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
     fontSize: 16,
-    color: '#1E293B',
-    backgroundColor: '#F8FAFC',
+    color: '#1F2937',
   },
   picker: {
     height: 50,
     width: '100%',
     borderWidth: 1,
-    borderColor: '#F1F5F9',
-    borderRadius: 12,
-    backgroundColor: '#F8FAFC',
+    borderColor: '#D1D5DB',
+    borderRadius: 8,
   },
   modalButtons: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginTop: 20,
-    gap: 15,
   },
   cancelButton: {
-    flex: 1,
-    backgroundColor: '#F1F5F9',
-    borderRadius: 16,
-    paddingVertical: 14,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
+    backgroundColor: '#F3F4F6',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 8,
   },
-  cancelButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#64748B',
-  },
-  saveButton: {
-    flex: 1,
-    borderRadius: 16,
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 3,
-  },
+  cancelButtonText: { color: '#6B7280', fontSize: 16, fontWeight: '600' },
+  saveButton: { flex: 1, marginLeft: 10 },
   saveButtonGradient: {
-    paddingVertical: 14,
+    paddingVertical: 12,
+    borderRadius: 8,
+    justifyContent: 'center',
     alignItems: 'center',
   },
-  saveButtonText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
-  },
+  saveButtonText: { color: '#FFFFFF', fontSize: 16, fontWeight: '600' },
 });
