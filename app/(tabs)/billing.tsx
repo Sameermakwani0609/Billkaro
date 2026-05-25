@@ -30,7 +30,9 @@ import {
   View,
 } from 'react-native';
 import {
+  Category,
   Customer,
+  getAllCategories,
   getAllCustomers,
   getAllProducts,
   getCustomerLastPurchaseAmount,
@@ -60,12 +62,16 @@ export default function WholesaleBilling() {
   const [billingDate, setBillingDate] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('All');
+  const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(
+    null,
+  );
   const [cart, setCart] = useState<CartItem[]>([]);
   const [billDiscount, setBillDiscount] = useState<string>('');
 
   // Categories from database
-  const [categories, setCategories] = useState<string[]>(['All']);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [allProducts, setAllProducts] = useState<Product[]>([]);
+  const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
 
   // Customer search states
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -100,31 +106,10 @@ export default function WholesaleBilling() {
     initializeDatabase();
   }, []);
 
-  // Extract categories from products when products change
+  // Filter products when search query or category changes
   useEffect(() => {
-    if (products.length > 0) {
-      const categoriesFromProducts = products
-        .map((product) => product.category)
-        .filter(
-          (category): category is string =>
-            category !== undefined &&
-            category !== null &&
-            category.trim() !== '',
-        );
-
-      const uniqueCategories = ['All', ...new Set(categoriesFromProducts)];
-      setCategories(uniqueCategories);
-
-      if (
-        selectedCategory !== 'All' &&
-        !uniqueCategories.includes(selectedCategory)
-      ) {
-        setSelectedCategory('All');
-      }
-    } else {
-      setCategories(['All']);
-    }
-  }, [products, selectedCategory]);
+    filterProducts();
+  }, [searchQuery, selectedCategoryId, allProducts]);
 
   // Load last purchase amount when selected customer changes
   useEffect(() => {
@@ -147,12 +132,55 @@ export default function WholesaleBilling() {
 
       await initDB();
       await loadCustomers();
-      await loadProducts();
+      await loadCategories();
+      await loadAllProducts();
       setDbStatus('ready');
     } catch (error) {
       console.error('Error initializing database:', error);
       setDbStatus('error');
     }
+  };
+
+  const loadCategories = async () => {
+    try {
+      const categoriesList = await getAllCategories();
+      setCategories(categoriesList);
+    } catch (error) {
+      console.error('Error loading categories:', error);
+    }
+  };
+
+  const loadAllProducts = async () => {
+    try {
+      setIsLoadingProducts(true);
+      const productsList = await getAllProducts();
+      setAllProducts(productsList);
+      setProducts(productsList);
+      filterProducts();
+    } catch (error) {
+      console.error('Error loading products:', error);
+      Alert.alert('Error', 'Failed to load products from database');
+    } finally {
+      setIsLoadingProducts(false);
+    }
+  };
+
+  const filterProducts = () => {
+    let filtered = [...allProducts];
+
+    // Filter by search query
+    if (searchQuery.trim()) {
+      filtered = filtered.filter((p) =>
+        p.name.toLowerCase().includes(searchQuery.toLowerCase()),
+      );
+    }
+
+    // Filter by category
+    if (selectedCategoryId !== null) {
+      filtered = filtered.filter((p) => p.categoryId === selectedCategoryId);
+    }
+
+    setFilteredProducts(filtered);
   };
 
   // Load last purchase amount for customer
@@ -181,24 +209,6 @@ export default function WholesaleBilling() {
       console.error('Error loading customers:', error);
     } finally {
       setIsLoadingCustomers(false);
-    }
-  };
-
-  // Load products from database
-  const loadProducts = async () => {
-    try {
-      setIsLoadingProducts(true);
-      console.log('Loading products from database...');
-
-      const productsList = await getAllProducts();
-      console.log('Products loaded from DB:', productsList);
-
-      setProducts(productsList);
-    } catch (error) {
-      console.error('Error loading products:', error);
-      Alert.alert('Error', 'Failed to load products from database');
-    } finally {
-      setIsLoadingProducts(false);
     }
   };
 
@@ -327,17 +337,11 @@ export default function WholesaleBilling() {
   // Refresh customers and products
   const handleRefresh = () => {
     loadCustomers();
-    loadProducts();
+    loadAllProducts();
     if (selectedCustomer) {
       loadLastPurchaseAmount(selectedCustomer.id);
     }
   };
-
-  const filteredProducts = products.filter(
-    (p) =>
-      p.name.toLowerCase().includes(searchQuery.toLowerCase()) &&
-      (selectedCategory === 'All' || p.category === selectedCategory),
-  );
 
   // Update wholesale rate for a product
   const updateWholesaleRate = (productId: number, newRate: string) => {
@@ -741,7 +745,7 @@ export default function WholesaleBilling() {
       setBillDiscount('');
       setLastPurchaseAmount(0);
 
-      await loadProducts();
+      await loadAllProducts();
     } catch (error) {
       console.error('Error generating bill:', error);
       Alert.alert('Error', 'Failed to generate bill');
@@ -972,7 +976,6 @@ export default function WholesaleBilling() {
           )}
         </View>
 
-        {/* Rest of the component remains the same */}
         {/* Date & Search */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Billing Details</Text>
@@ -1019,29 +1022,47 @@ export default function WholesaleBilling() {
         {/* Categories */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>
-            Categories ({categories.length - 1})
+            Categories ({categories.length})
           </Text>
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
             style={styles.categoryScroll}
           >
+            <TouchableOpacity
+              key="all"
+              style={[
+                styles.categoryBadge,
+                selectedCategoryId === null && styles.categorySelected,
+              ]}
+              onPress={() => setSelectedCategoryId(null)}
+            >
+              <Text
+                style={[
+                  styles.categoryText,
+                  selectedCategoryId === null && styles.categoryTextSelected,
+                ]}
+              >
+                All
+              </Text>
+            </TouchableOpacity>
             {categories.map((cat) => (
               <TouchableOpacity
-                key={cat}
+                key={cat.id}
                 style={[
                   styles.categoryBadge,
-                  selectedCategory === cat && styles.categorySelected,
+                  selectedCategoryId === cat.id && styles.categorySelected,
                 ]}
-                onPress={() => setSelectedCategory(cat)}
+                onPress={() => setSelectedCategoryId(cat.id)}
               >
                 <Text
                   style={[
                     styles.categoryText,
-                    selectedCategory === cat && styles.categoryTextSelected,
+                    selectedCategoryId === cat.id &&
+                      styles.categoryTextSelected,
                   ]}
                 >
-                  {cat}
+                  {cat.name}
                 </Text>
               </TouchableOpacity>
             ))}
@@ -1054,7 +1075,7 @@ export default function WholesaleBilling() {
             <Text style={styles.sectionTitle}>
               Products ({filteredProducts.length})
             </Text>
-            <TouchableOpacity onPress={loadProducts}>
+            <TouchableOpacity onPress={loadAllProducts}>
               <Text style={styles.refreshText}>Refresh</Text>
             </TouchableOpacity>
           </View>
@@ -1069,7 +1090,9 @@ export default function WholesaleBilling() {
               <Text style={styles.emptyStateSubtext}>
                 {searchQuery
                   ? 'Try a different search'
-                  : 'No products available in database'}
+                  : selectedCategoryId !== null
+                    ? 'No products in this category'
+                    : 'No products available in database'}
               </Text>
             </View>
           ) : (
@@ -1085,7 +1108,7 @@ export default function WholesaleBilling() {
                     <Text style={styles.productName}>{product.name}</Text>
                     <View style={styles.categoryStockRow}>
                       <Text style={styles.productCategory}>
-                        {product.category}
+                        {product.categoryName || 'Uncategorized'}
                       </Text>
                       <Text style={styles.productStock}>
                         <Package size={12} color="#6B7280" /> {product.stock}{' '}
@@ -1372,7 +1395,6 @@ export default function WholesaleBilling() {
   );
 }
 
-// Styles remain exactly the same as in your original code
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F3F4F6' },
   headerGradient: {
@@ -1717,12 +1739,13 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   searchInput: { flex: 1, marginLeft: 8, height: 40, color: '#111827' },
-  categoryScroll: { flexDirection: 'row', gap: 8 },
+  categoryScroll: { flexDirection: 'row', gap: 8, marginTop: 8 },
   categoryBadge: {
     backgroundColor: '#E5E7EB',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 16,
+    marginRight: 8,
   },
   categorySelected: { backgroundColor: '#2563EB' },
   categoryText: { color: '#374151', fontWeight: '500' },
@@ -1827,6 +1850,25 @@ const styles = StyleSheet.create({
     backgroundColor: '#ECFDF5',
     fontWeight: '700',
     color: '#047857',
+  },
+  rateInput: {
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    borderRadius: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#111827',
+    minWidth: 70,
+    textAlign: 'center',
+    backgroundColor: '#FFF',
+  },
+  rateInputModified: {
+    borderColor: '#2563EB',
+    backgroundColor: '#EFF6FF',
+    fontWeight: '700',
+    color: '#1E40AF',
   },
   billDiscountSection: {
     backgroundColor: '#FFF',
@@ -2070,23 +2112,4 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   generateBtnText: { color: '#FFF', fontSize: 16, fontWeight: '700' },
-  rateInput: {
-    borderWidth: 1,
-    borderColor: '#D1D5DB',
-    borderRadius: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#111827',
-    minWidth: 70,
-    textAlign: 'center',
-    backgroundColor: '#FFF',
-  },
-  rateInputModified: {
-    borderColor: '#2563EB',
-    backgroundColor: '#EFF6FF',
-    fontWeight: '700',
-    color: '#1E40AF',
-  },
 });

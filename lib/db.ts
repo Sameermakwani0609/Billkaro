@@ -272,7 +272,6 @@ export function updateCategory(id: number, name: string): Promise<void> {
     }
   });
 }
-
 export function deleteCategory(id: number): Promise<void> {
   return new Promise((resolve, reject) => {
     try {

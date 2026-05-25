@@ -15,7 +15,13 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { getAllSuppliers, Supplier } from '../../lib/db';
+import {
+  getAllProducts,
+  getAllSuppliers,
+  insertProduct,
+  Supplier,
+  updateProduct,
+} from '../../lib/db';
 
 interface PurchaseItem {
   id: string;
@@ -56,7 +62,8 @@ export default function PurchaseScreen() {
   });
 
   const [items, setItems] = useState<PurchaseItem[]>([]);
-  const units = ['pcs', 'unit', 'har', 'box'];
+  const [processing, setProcessing] = useState(false);
+  const units = ['pcs', 'unit', 'kg', 'g', 'ltr', 'box', 'packet', 'dozen'];
 
   // Load suppliers on component mount
   useEffect(() => {
@@ -213,7 +220,120 @@ export default function PurchaseScreen() {
     ]);
   };
 
-  const saveBill = () => {
+  // Function to update or add product stock with EXACT MATCHING
+  const updateOrAddProductStock = async (
+    item: PurchaseItem,
+  ): Promise<{
+    action: string;
+    name: string;
+    oldStock?: number;
+    newStock?: number;
+    reason?: string;
+  }> => {
+    try {
+      // Get all existing products
+      const allProducts = await getAllProducts();
+
+      // Check if product exists with EXACT SAME properties:
+      // - Same name (case-insensitive)
+      // - Same MRP
+      // - Same Purchase Price
+      // - Same Unit
+      const exactMatch = allProducts.find(
+        (product) =>
+          product.name.toLowerCase() === item.name.toLowerCase() &&
+          product.mrp === item.mrp &&
+          product.purchasePrice === item.purchasePrice &&
+          product.unit.toLowerCase() === item.unit.toLowerCase(),
+      );
+
+      if (exactMatch) {
+        // EXACT match found - just add quantity to stock
+        const oldStock = exactMatch.stock;
+        const newStock = oldStock + item.quantity;
+
+        await updateProduct(
+          exactMatch.id,
+          exactMatch.name,
+          exactMatch.mrp, // Keep existing MRP
+          exactMatch.sellPrice, // Keep existing selling price
+          exactMatch.purchasePrice, // Keep existing purchase price
+          newStock,
+          exactMatch.unit,
+          exactMatch.categoryId,
+          exactMatch.minStock,
+        );
+
+        console.log(`✅ Updated ${item.name}: Stock ${oldStock} → ${newStock}`);
+        return {
+          action: 'updated',
+          name: item.name,
+          oldStock,
+          newStock,
+          reason: 'Exact match found - quantity added',
+        };
+      } else {
+        // Check if product exists with same name but different details
+        const nameMatch = allProducts.find(
+          (product) => product.name.toLowerCase() === item.name.toLowerCase(),
+        );
+
+        if (nameMatch) {
+          // Same name but different MRP, price, or unit - create as new product variant
+          const variantName = `${item.name} (${item.unit} - ₹${item.mrp})`;
+
+          await insertProduct(
+            variantName,
+            item.mrp,
+            item.sellPrice,
+            item.purchasePrice,
+            item.quantity,
+            item.unit,
+            null,
+            10,
+          );
+
+          console.log(
+            `✅ Added variant: ${variantName} with stock ${item.quantity}`,
+          );
+          return {
+            action: 'added',
+            name: variantName,
+            newStock: item.quantity,
+            reason: 'Different price/unit - created as variant',
+          };
+        } else {
+          // Completely new product
+          await insertProduct(
+            item.name,
+            item.mrp,
+            item.sellPrice,
+            item.purchasePrice,
+            item.quantity,
+            item.unit,
+            null,
+            10,
+          );
+
+          console.log(
+            `✅ Added new product: ${item.name} with stock ${item.quantity}`,
+          );
+          return {
+            action: 'added',
+            name: item.name,
+            newStock: item.quantity,
+            reason: 'New product',
+          };
+        }
+      }
+    } catch (error) {
+      console.error(`❌ Error processing ${item.name}:`, error);
+      throw error;
+    }
+  };
+
+  const saveBill = async () => {
+    // Validation
     if (!supplier || !billNo || !date || items.length === 0) {
       Alert.alert(
         'Error',
@@ -222,22 +342,86 @@ export default function PurchaseScreen() {
       return;
     }
 
-    console.log('Saving bill with supplier ID:', supplierId);
+    if (!supplierId) {
+      Alert.alert('Error', 'Please select a valid supplier');
+      return;
+    }
 
-    Alert.alert('Success', 'Bill saved successfully!');
-    setSupplier('');
-    setSupplierId(null);
-    setIsSupplierSelected(false);
-    setBillNo('');
-    setDate(new Date());
-    setBillType('Cash');
-    setItems([]);
-  };
+    setProcessing(true);
 
-  const onChangeDate = (event: any, selectedDate?: Date) => {
-    const currentDate = selectedDate || date;
-    setShowDatePicker(Platform.OS === 'ios');
-    setDate(currentDate);
+    try {
+      // Process each item to update/add stock
+      const results = [];
+      let hasError = false;
+
+      for (const item of items) {
+        try {
+          const result = await updateOrAddProductStock(item);
+          results.push(result);
+        } catch (error) {
+          hasError = true;
+          console.error(`Failed to process ${item.name}:`, error);
+        }
+      }
+
+      if (hasError) {
+        Alert.alert(
+          'Partial Success',
+          `Some items failed to process. Please check the console for details.\n\nSuccessful: ${results.length}/${items.length}`,
+        );
+      } else {
+        // Count results
+        const addedCount = results.filter((r) => r.action === 'added').length;
+        const updatedCount = results.filter(
+          (r) => r.action === 'updated',
+        ).length;
+
+        // Create detailed summary
+        let stockSummary = '';
+        if (addedCount > 0) {
+          stockSummary += `📦 New Products/Variants Added: ${addedCount}\n`;
+          const addedItems = results.filter((r) => r.action === 'added');
+          addedItems.forEach((item) => {
+            stockSummary += `   • ${item.name}\n`;
+          });
+        }
+        if (updatedCount > 0) {
+          stockSummary += `🔄 Products Updated: ${updatedCount}\n`;
+          const updatedItems = results.filter((r) => r.action === 'updated');
+          updatedItems.forEach((item) => {
+            stockSummary += `   • ${item.name}: ${item.oldStock} → ${item.newStock}\n`;
+          });
+        }
+
+        Alert.alert(
+          '✅ Success!',
+          `Purchase bill saved successfully!\n\n${stockSummary}\nTotal Items: ${items.length}\nBill Amount: ₹${getTotalBillAmount().toFixed(2)}`,
+          [
+            {
+              text: 'OK',
+              onPress: () => {
+                // Reset form after successful save
+                setSupplier('');
+                setSupplierId(null);
+                setIsSupplierSelected(false);
+                setBillNo('');
+                setDate(new Date());
+                setBillType('Cash');
+                setItems([]);
+              },
+            },
+          ],
+        );
+      }
+    } catch (error) {
+      console.error('Error saving bill:', error);
+      Alert.alert(
+        'Error',
+        'Failed to save bill. Please check your connection and try again.',
+      );
+    } finally {
+      setProcessing(false);
+    }
   };
 
   const getTotalBillAmount = () => {
@@ -321,7 +505,7 @@ export default function PurchaseScreen() {
     </View>
   );
 
-  // Header animation values - keeping subtitle visible
+  // Header animation values
   const headerHeight = scrollY.interpolate({
     inputRange: [0, 100],
     outputRange: [120, 90],
@@ -468,7 +652,10 @@ export default function PurchaseScreen() {
                   value={date}
                   mode="date"
                   display="default"
-                  onChange={onChangeDate}
+                  onChange={(event, selectedDate) => {
+                    setShowDatePicker(false);
+                    if (selectedDate) setDate(selectedDate);
+                  }}
                 />
               )}
             </View>
@@ -510,7 +697,7 @@ export default function PurchaseScreen() {
                   style={styles.picker}
                 >
                   {units.map((u) => (
-                    <Picker.Item key={u} label={u} value={u} />
+                    <Picker.Item key={u} label={u.toUpperCase()} value={u} />
                   ))}
                 </Picker>
               </View>
@@ -633,8 +820,16 @@ export default function PurchaseScreen() {
         {/* Save Button */}
         {items.length > 0 && (
           <View style={styles.footer}>
-            <TouchableOpacity style={styles.saveButton} onPress={saveBill}>
-              <Text style={styles.saveButtonText}>💾 Save Purchase Bill</Text>
+            <TouchableOpacity
+              style={[styles.saveButton, processing && styles.disabledButton]}
+              onPress={saveBill}
+              disabled={processing}
+            >
+              <Text style={styles.saveButtonText}>
+                {processing
+                  ? '⏳ Processing...'
+                  : '💾 Save Purchase Bill & Update Stock'}
+              </Text>
             </TouchableOpacity>
           </View>
         )}
@@ -751,7 +946,7 @@ const styles = StyleSheet.create({
   },
   scrollView: {
     flex: 1,
-    marginTop: 100, // Adjusted to account for sticky header
+    marginTop: 100,
   },
   card: {
     backgroundColor: '#ffffff',
@@ -1039,6 +1234,10 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 5,
+  },
+  disabledButton: {
+    backgroundColor: '#94a3b8',
+    opacity: 0.7,
   },
   saveButtonText: {
     color: '#ffffff',
