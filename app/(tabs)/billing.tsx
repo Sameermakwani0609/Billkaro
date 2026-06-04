@@ -595,12 +595,14 @@ export default function WholesaleBilling() {
     return parseFloat(totalDiscount.toFixed(2));
   };
 
+  // Calculate amount after item discount
+  const getAmountAfterItemDiscount = () => {
+    return getSubtotal() - getTotalItemDiscount();
+  };
+
   // Calculate bill discount amount
   const getBillDiscountAmount = () => {
-    const subtotal = getSubtotal();
-    const itemDiscount = getTotalItemDiscount();
-    const amountAfterItemDiscount = subtotal - itemDiscount;
-
+    const amountAfterItemDiscount = getAmountAfterItemDiscount();
     const billDiscountValue = billDiscount ? parseFloat(billDiscount) : 0;
     if (billDiscountValue > 0) {
       return parseFloat(
@@ -612,13 +614,48 @@ export default function WholesaleBilling() {
 
   // Calculate final amount after bill discount
   const getFinalAmount = () => {
-    const subtotal = getSubtotal();
-    const itemDiscount = getTotalItemDiscount();
+    const amountAfterItemDiscount = getAmountAfterItemDiscount();
     const billDiscountAmount = getBillDiscountAmount();
-
     return parseFloat(
-      (subtotal - itemDiscount - billDiscountAmount).toFixed(2),
+      (amountAfterItemDiscount - billDiscountAmount).toFixed(2),
     );
+  };
+
+  // Calculate total cost price (what you paid for the products)
+  const getTotalCostPrice = () => {
+    const totalCost = cart.reduce((sum, item) => {
+      return sum + item.purchasePrice * item.quantity;
+    }, 0);
+    return parseFloat(totalCost.toFixed(2));
+  };
+
+  // Calculate profit before any discounts
+  const getProfitBeforeAnyDiscount = () => {
+    const subtotal = getSubtotal();
+    const totalCost = getTotalCostPrice();
+    return parseFloat((subtotal - totalCost).toFixed(2));
+  };
+
+  // Calculate profit after item discounts but before bill discount
+  const getProfitAfterItemDiscount = () => {
+    const amountAfterItemDiscount = getAmountAfterItemDiscount();
+    const totalCost = getTotalCostPrice();
+    return parseFloat((amountAfterItemDiscount - totalCost).toFixed(2));
+  };
+
+  // Calculate final profit after all discounts (bill discount included)
+  const getFinalProfit = () => {
+    const finalAmount = getFinalAmount();
+    const totalCost = getTotalCostPrice();
+    return parseFloat((finalAmount - totalCost).toFixed(2));
+  };
+
+  // Calculate profit margin percentage
+  const getProfitMargin = () => {
+    const finalProfit = getFinalProfit();
+    const finalAmount = getFinalAmount();
+    if (finalAmount === 0) return 0;
+    return parseFloat(((finalProfit / finalAmount) * 100).toFixed(2));
   };
 
   // Update product stock in database
@@ -662,6 +699,8 @@ export default function WholesaleBilling() {
       const totalItemDiscount = getTotalItemDiscount();
       const billDiscountAmount = getBillDiscountAmount();
       const finalAmount = getFinalAmount();
+      const finalProfit = getFinalProfit();
+      const profitMargin = getProfitMargin();
 
       await updateProductStocks();
 
@@ -672,15 +711,17 @@ export default function WholesaleBilling() {
           const finalPrice = item.discountedPrice || basePrice;
           const itemTotal = getItemTotal(item);
           const itemDiscountAmount = getItemDiscountAmount(item);
+          const purchaseRate = item.purchasePrice;
 
           return {
             name: item.name,
             quantity: item.quantity,
-            rate: basePrice, // Original rate before discount
-            finalRate: finalPrice, // Rate after item discount
-            discountPercent: item.discount || 0, // Item discount percentage
-            discountAmount: itemDiscountAmount, // Item discount amount
-            total: itemTotal, // Final total for this item
+            rate: basePrice,
+            purchaseRate: purchaseRate,
+            finalRate: finalPrice,
+            discountPercent: item.discount || 0,
+            discountAmount: itemDiscountAmount,
+            total: itemTotal,
           };
         });
 
@@ -691,10 +732,10 @@ export default function WholesaleBilling() {
           billingDate.toISOString().split('T')[0],
           finalAmount,
           cartItems,
-          billDiscount ? parseFloat(billDiscount) : 0, // Bill discount percentage
-          subtotal, // Subtotal before any discounts
-          totalItemDiscount, // Total item discount amount
-          billDiscountAmount, // Bill discount amount
+          billDiscount ? parseFloat(billDiscount) : 0,
+          subtotal,
+          totalItemDiscount,
+          billDiscountAmount,
         );
 
         await updateCustomerPurchases(selectedCustomer.id, finalAmount);
@@ -706,18 +747,21 @@ export default function WholesaleBilling() {
         billType,
         billingDate,
         cart: cart.map((item) => ({
-          ...item,
-          baseRate: item.customRate || item.sellPrice,
-          finalRate: item.discountedPrice || item.customRate || item.sellPrice,
-          discount: item.discount,
+          name: item.name,
+          quantity: item.quantity,
+          sellingPrice: item.customRate || item.sellPrice,
+          purchasePrice: item.purchasePrice,
           itemTotal: getItemTotal(item),
-          itemDiscountAmount: getItemDiscountAmount(item),
+          itemProfit: getItemTotal(item) - item.purchasePrice * item.quantity,
         })),
         subtotal: subtotal,
         itemDiscount: totalItemDiscount,
         billDiscount: billDiscount,
         billDiscountAmount: billDiscountAmount,
-        final: finalAmount,
+        finalAmount: finalAmount,
+        totalCost: getTotalCostPrice(),
+        finalProfit: finalProfit,
+        profitMargin: profitMargin,
       });
 
       const discountSummary = [];
@@ -732,7 +776,18 @@ export default function WholesaleBilling() {
 
       Alert.alert(
         'Success',
-        `Bill generated successfully!\n\nCustomer: ${customerName}\nSubtotal: ₹${subtotal.toFixed(2)}\n${discountSummary.join('\n')}\nFinal Amount: ₹${finalAmount.toFixed(2)}`,
+        `✅ Bill Generated Successfully!\n\n` +
+          `👤 Customer: ${customerName}\n` +
+          `📅 Date: ${billingDate.toLocaleDateString()}\n\n` +
+          `💰 Bill Summary:\n` +
+          `Subtotal: ₹${subtotal.toFixed(2)}\n` +
+          `${discountSummary.join('\n')}\n` +
+          `────────────────\n` +
+          `Final Amount: ₹${finalAmount.toFixed(2)}\n\n` +
+          `📊 Profit Analysis:\n` +
+          `Total Cost: ₹${getTotalCostPrice().toFixed(2)}\n` +
+          `Final Profit: ₹${finalProfit.toFixed(2)}\n` +
+          `Profit Margin: ${profitMargin}%`,
       );
 
       // Reset form and reload
@@ -799,7 +854,7 @@ export default function WholesaleBilling() {
     <View style={styles.container}>
       <StatusBar backgroundColor="#2563EB" barStyle="light-content" />
 
-      {/* Header - Fixed with proper top margin */}
+      {/* Header */}
       <LinearGradient
         colors={['#2563EB', '#1D4ED8']}
         start={{ x: 0, y: 0 }}
@@ -1157,6 +1212,12 @@ export default function WholesaleBilling() {
                         />
                       </View>
                     </View>
+                    <View style={styles.purchasePriceInfo}>
+                      <Text style={styles.purchasePriceLabel}>
+                        Cost Price: ₹{product.purchasePrice.toFixed(2)} per{' '}
+                        {product.unit}
+                      </Text>
+                    </View>
                   </View>
                   <View style={styles.quantityContainer}>
                     <View style={styles.quantityControls}>
@@ -1259,14 +1320,13 @@ export default function WholesaleBilling() {
                 const itemTotal = getItemTotal(item);
                 const discountAmount = getItemDiscountAmount(item);
                 const hasDiscount = item.discount && item.discount > 0;
+                const costAmount = item.purchasePrice * item.quantity;
+                const itemProfit = itemTotal - costAmount;
 
                 return (
                   <View key={item.id} style={styles.cartItem}>
                     <View style={styles.cartItemInfo}>
                       <Text style={styles.cartItemName}>{item.name}</Text>
-                      <Text style={styles.cartItemName}>
-                        MRP : ₹{item.mrp.toFixed(2)}
-                      </Text>
                       <View style={styles.cartItemDetails}>
                         <View style={styles.cartPriceRow}>
                           <Text style={styles.cartBasePrice}>
@@ -1291,6 +1351,21 @@ export default function WholesaleBilling() {
                             </Text>
                           </View>
                         )}
+                        <View style={styles.profitRow}>
+                          <Text style={styles.profitLabel}>
+                            Cost: ₹{costAmount.toFixed(2)}
+                          </Text>
+                          <Text
+                            style={[
+                              styles.profitValue,
+                              itemProfit >= 0
+                                ? styles.profitPositive
+                                : styles.profitNegative,
+                            ]}
+                          >
+                            Item Profit: ₹{itemProfit.toFixed(2)}
+                          </Text>
+                        </View>
                       </View>
                       <View style={styles.cartItemRow}>
                         <View style={styles.cartQuantityContainer}>
@@ -1365,6 +1440,13 @@ export default function WholesaleBilling() {
                   </View>
                 )}
 
+                <View style={styles.summaryRow}>
+                  <Text style={styles.summaryLabel}>After Item Discount:</Text>
+                  <Text style={styles.summaryValue}>
+                    ₹{getAmountAfterItemDiscount().toFixed(2)}
+                  </Text>
+                </View>
+
                 {billDiscount && parseFloat(billDiscount) > 0 && (
                   <View style={styles.summaryRow}>
                     <Text style={styles.summaryLabel}>
@@ -1381,6 +1463,52 @@ export default function WholesaleBilling() {
                   <Text style={styles.finalTotalValue}>
                     ₹{getFinalAmount().toFixed(2)}
                   </Text>
+                </View>
+
+                {/* Profit Analysis */}
+                <View style={styles.profitSection}>
+                  <Text style={styles.profitSectionTitle}>Profit Analysis</Text>
+
+                  <View style={styles.summaryRow}>
+                    <Text style={styles.summaryLabel}>Total Cost:</Text>
+                    <Text style={styles.summaryValue}>
+                      ₹{getTotalCostPrice().toFixed(2)}
+                    </Text>
+                  </View>
+
+                  <View style={styles.summaryRow}>
+                    <Text style={styles.summaryLabel}>
+                      Profit Before Discount:
+                    </Text>
+                    <Text style={[styles.summaryValue, styles.profitPositive]}>
+                      ₹{getProfitBeforeAnyDiscount().toFixed(2)}
+                    </Text>
+                  </View>
+
+                  <View style={styles.summaryRow}>
+                    <Text style={styles.summaryLabel}>
+                      Profit After Item Disc:
+                    </Text>
+                    <Text style={[styles.summaryValue, styles.profitPositive]}>
+                      ₹{getProfitAfterItemDiscount().toFixed(2)}
+                    </Text>
+                  </View>
+
+                  <View style={[styles.summaryRow, styles.finalProfitRow]}>
+                    <Text style={styles.finalProfitLabel}>
+                      Final Net Profit:
+                    </Text>
+                    <Text style={styles.finalProfitValue}>
+                      ₹{getFinalProfit().toFixed(2)}
+                    </Text>
+                  </View>
+
+                  <View style={styles.summaryRow}>
+                    <Text style={styles.summaryLabel}>Profit Margin:</Text>
+                    <Text style={[styles.summaryValue, styles.profitPositive]}>
+                      {getProfitMargin()}%
+                    </Text>
+                  </View>
                 </View>
               </View>
             </View>
@@ -1783,6 +1911,15 @@ const styles = StyleSheet.create({
   priceColumn: {},
   priceLabel: { fontSize: 10, color: '#6B7280', marginBottom: 4 },
   productMrp: { fontSize: 12, fontWeight: '600', color: '#111827' },
+  purchasePriceInfo: {
+    marginTop: 4,
+    paddingTop: 2,
+  },
+  purchasePriceLabel: {
+    fontSize: 10,
+    color: '#059669',
+    fontWeight: '500',
+  },
   quantityContainer: { width: 100, alignItems: 'center' },
   quantityControls: {
     flexDirection: 'row',
@@ -1985,6 +2122,29 @@ const styles = StyleSheet.create({
     color: '#059669',
     fontWeight: '600',
   },
+  profitRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 4,
+    paddingTop: 4,
+    borderTopWidth: 1,
+    borderTopColor: '#F3F4F6',
+  },
+  profitLabel: {
+    fontSize: 11,
+    color: '#6B7280',
+  },
+  profitValue: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  profitPositive: {
+    color: '#059669',
+  },
+  profitNegative: {
+    color: '#EF4444',
+  },
   cartItemRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -2094,6 +2254,35 @@ const styles = StyleSheet.create({
     fontSize: 18,
     color: '#111827',
     fontWeight: '700',
+  },
+  profitSection: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 2,
+    borderTopColor: '#10B981',
+  },
+  profitSectionTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#059669',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  finalProfitRow: {
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#D1D5DB',
+  },
+  finalProfitLabel: {
+    fontSize: 15,
+    color: '#059669',
+    fontWeight: '800',
+  },
+  finalProfitValue: {
+    fontSize: 16,
+    color: '#059669',
+    fontWeight: '800',
   },
   cartTotal: {
     flexDirection: 'row',

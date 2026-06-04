@@ -72,13 +72,13 @@ export default function Dashboard() {
     {
       title: 'Invoices',
       icon: FileText,
-      route: '/view-pruchase',
+      route: '/view-purchase',
       description: 'Manage invoices',
     },
     {
       title: 'Payments',
       icon: CreditCard,
-      route: '/payments',
+      route: '/UnpaidCreditBillsScreen',
       description: 'Payment records',
     },
   ];

@@ -16,9 +16,11 @@ import {
   View,
 } from 'react-native';
 import {
+  getAllCategories,
   getAllProducts,
   getAllSuppliers,
   insertProduct,
+  insertPurchaseBill,
   Supplier,
   updateProduct,
 } from '../../lib/db';
@@ -32,6 +34,7 @@ interface PurchaseItem {
   quantity: number;
   unit: string;
   total: number;
+  categoryId?: number | null;
 }
 
 export default function PurchaseScreen() {
@@ -59,16 +62,28 @@ export default function PurchaseScreen() {
     sellPrice: '',
     quantity: '',
     unit: 'pcs',
+    categoryId: null as number | null,
   });
 
   const [items, setItems] = useState<PurchaseItem[]>([]);
   const [processing, setProcessing] = useState(false);
+  const [categories, setCategories] = useState<any[]>([]);
   const units = ['pcs', 'unit', 'kg', 'g', 'ltr', 'box', 'packet', 'dozen'];
 
-  // Load suppliers on component mount
+  // Load suppliers and categories on component mount
   useEffect(() => {
     loadSuppliers();
+    loadCategories();
   }, []);
+
+  const loadCategories = async () => {
+    try {
+      const categoryList = await getAllCategories();
+      setCategories(categoryList);
+    } catch (error) {
+      console.error('Error loading categories:', error);
+    }
+  };
 
   const loadSuppliers = async () => {
     setLoadingSuppliers(true);
@@ -166,6 +181,7 @@ export default function PurchaseScreen() {
               sellPrice: parseFloat(itemForm.sellPrice),
               quantity: parseFloat(itemForm.quantity),
               unit: itemForm.unit,
+              categoryId: itemForm.categoryId,
               total,
             }
           : item,
@@ -181,6 +197,7 @@ export default function PurchaseScreen() {
         sellPrice: parseFloat(itemForm.sellPrice),
         quantity: parseFloat(itemForm.quantity),
         unit: itemForm.unit,
+        categoryId: itemForm.categoryId,
         total,
       };
       setItems([...items, newItem]);
@@ -194,6 +211,7 @@ export default function PurchaseScreen() {
       sellPrice: '',
       quantity: '',
       unit: 'pcs',
+      categoryId: null,
     });
   };
 
@@ -206,6 +224,7 @@ export default function PurchaseScreen() {
       sellPrice: item.sellPrice.toString(),
       quantity: item.quantity.toString(),
       unit: item.unit,
+      categoryId: item.categoryId || null,
     });
   };
 
@@ -289,7 +308,7 @@ export default function PurchaseScreen() {
             item.purchasePrice,
             item.quantity,
             item.unit,
-            null,
+            item.categoryId || null,
             10,
           );
 
@@ -311,7 +330,7 @@ export default function PurchaseScreen() {
             item.purchasePrice,
             item.quantity,
             item.unit,
-            null,
+            item.categoryId || null,
             10,
           );
 
@@ -364,6 +383,31 @@ export default function PurchaseScreen() {
         }
       }
 
+      // Save purchase bill to database
+      const totalAmount = getTotalBillAmount();
+      const formattedDate = date.toISOString().split('T')[0];
+
+      const billItems = items.map((item) => ({
+        name: item.name,
+        mrp: item.mrp,
+        purchasePrice: item.purchasePrice,
+        sellPrice: item.sellPrice,
+        quantity: item.quantity,
+        unit: item.unit,
+        total: item.total,
+        categoryId: item.categoryId || null,
+      }));
+
+      await insertPurchaseBill(
+        supplier,
+        supplierId,
+        billNo,
+        billType,
+        formattedDate,
+        totalAmount,
+        billItems,
+      );
+
       if (hasError) {
         Alert.alert(
           'Partial Success',
@@ -395,7 +439,7 @@ export default function PurchaseScreen() {
 
         Alert.alert(
           '✅ Success!',
-          `Purchase bill saved successfully!\n\n${stockSummary}\nTotal Items: ${items.length}\nBill Amount: ₹${getTotalBillAmount().toFixed(2)}`,
+          `Purchase bill saved successfully!\n\n${stockSummary}\nTotal Items: ${items.length}\nBill Amount: ₹${totalAmount.toFixed(2)}`,
           [
             {
               text: 'OK',
@@ -428,6 +472,12 @@ export default function PurchaseScreen() {
     return items.reduce((sum, item) => sum + item.total, 0);
   };
 
+  const getCategoryName = (categoryId: number | null | undefined): string => {
+    if (!categoryId) return 'Uncategorized';
+    const category = categories.find((c) => c.id === categoryId);
+    return category ? category.name : 'Uncategorized';
+  };
+
   const renderSupplierItem = ({ item }: { item: Supplier }) => (
     <TouchableOpacity
       style={styles.supplierItem}
@@ -452,6 +502,13 @@ export default function PurchaseScreen() {
         <Text style={styles.itemName} numberOfLines={1}>
           {item.name}
         </Text>
+        {item.categoryId && (
+          <View style={styles.categoryBadge}>
+            <Text style={styles.categoryBadgeText}>
+              {getCategoryName(item.categoryId)}
+            </Text>
+          </View>
+        )}
       </View>
 
       <View style={styles.itemDetails}>
@@ -750,7 +807,7 @@ export default function PurchaseScreen() {
             </View>
           </View>
 
-          {/* Quantity and Add Button */}
+          {/* Quantity and Category and Add Button */}
           <View style={styles.formRow}>
             <View style={[styles.formGroup, { flex: 1 }]}>
               <Text style={styles.label}>Quantity *</Text>
@@ -768,10 +825,37 @@ export default function PurchaseScreen() {
               />
             </View>
 
+            <View style={[styles.formGroup, { flex: 1 }]}>
+              <Text style={styles.label}>Category</Text>
+              <View style={styles.pickerContainer}>
+                <Picker
+                  selectedValue={
+                    itemForm.categoryId ? itemForm.categoryId.toString() : ''
+                  }
+                  onValueChange={(value) =>
+                    setItemForm({
+                      ...itemForm,
+                      categoryId: value ? parseInt(value) : null,
+                    })
+                  }
+                  style={styles.picker}
+                >
+                  <Picker.Item label="Select Category" value="" />
+                  {categories.map((cat) => (
+                    <Picker.Item
+                      key={cat.id}
+                      label={cat.name}
+                      value={cat.id.toString()}
+                    />
+                  ))}
+                </Picker>
+              </View>
+            </View>
+
             <View
               style={[
                 styles.formGroup,
-                { flex: 2, justifyContent: 'flex-end' },
+                { flex: 1.5, justifyContent: 'flex-end' },
               ]}
             >
               <TouchableOpacity
@@ -782,7 +866,7 @@ export default function PurchaseScreen() {
                 onPress={addItem}
               >
                 <Text style={styles.addButtonText}>
-                  {itemForm.id ? 'Update Item' : 'Add Item to Bill'}
+                  {itemForm.id ? 'Update' : 'Add Item'}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -1168,6 +1252,18 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#1f2937',
     flex: 1,
+  },
+  categoryBadge: {
+    backgroundColor: '#dbeafe',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    marginLeft: 8,
+  },
+  categoryBadgeText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#2563eb',
   },
   itemDetails: {
     marginBottom: 12,

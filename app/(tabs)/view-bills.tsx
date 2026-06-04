@@ -1,3 +1,4 @@
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { useNavigation } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
@@ -51,16 +52,24 @@ interface CartItem extends Product {
   discountAmount?: number;
 }
 
+type FilterType = 'All' | 'Cash' | 'Credit';
+
 export default function ViewBillsScreen() {
   const navigation = useNavigation();
   const [bills, setBills] = useState<Bill[]>([]);
   const [filteredBills, setFilteredBills] = useState<Bill[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
+  const [filterType, setFilterType] = useState<FilterType>('All');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedBill, setSelectedBill] = useState<Bill | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editLoading, setEditLoading] = useState(false);
+
+  // Date filter states
+  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [isDateFilterActive, setIsDateFilterActive] = useState(false);
 
   // Edit form states
   const [customerName, setCustomerName] = useState('');
@@ -88,20 +97,10 @@ export default function ViewBillsScreen() {
     loadCustomersAndProducts();
   }, []);
 
-  // Filter bills when search query changes
+  // Filter bills when search query, filter type, or date changes
   useEffect(() => {
-    if (searchQuery.trim() === '') {
-      setFilteredBills(bills);
-    } else {
-      const filtered = bills.filter(
-        (bill: Bill) =>
-          bill.customerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          bill.id.toString().includes(searchQuery) ||
-          bill.billType.toLowerCase().includes(searchQuery.toLowerCase()),
-      );
-      setFilteredBills(filtered);
-    }
-  }, [searchQuery, bills]);
+    filterBills();
+  }, [searchQuery, bills, filterType, selectedDate]);
 
   // Filter products when search query changes
   useEffect(() => {
@@ -113,13 +112,44 @@ export default function ViewBillsScreen() {
           product.name
             .toLowerCase()
             .includes(productSearchQuery.toLowerCase()) ||
-          product.category
-            .toLowerCase()
-            .includes(productSearchQuery.toLowerCase()),
+          (product.categoryName &&
+            product.categoryName
+              .toLowerCase()
+              .includes(productSearchQuery.toLowerCase())),
       );
       setFilteredProducts(filtered);
     }
   }, [productSearchQuery, products]);
+
+  const filterBills = () => {
+    let filtered = [...bills];
+
+    // Apply bill type filter
+    if (filterType !== 'All') {
+      filtered = filtered.filter((bill: Bill) => bill.billType === filterType);
+    }
+
+    // Apply date filter
+    if (selectedDate && isDateFilterActive) {
+      const selectedDateString = selectedDate.toISOString().split('T')[0];
+      filtered = filtered.filter((bill: Bill) => {
+        const billDate = bill.billingDate.split('T')[0];
+        return billDate === selectedDateString;
+      });
+    }
+
+    // Apply search query filter
+    if (searchQuery.trim() !== '') {
+      filtered = filtered.filter(
+        (bill: Bill) =>
+          bill.customerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          bill.id.toString().includes(searchQuery) ||
+          bill.billType.toLowerCase().includes(searchQuery.toLowerCase()),
+      );
+    }
+
+    setFilteredBills(filtered);
+  };
 
   const loadBills = async () => {
     try {
@@ -164,6 +194,24 @@ export default function ViewBillsScreen() {
     loadBills();
   };
 
+  const handleDateChange = (event: any, selectedDate?: Date) => {
+    setShowDatePicker(false);
+    if (selectedDate) {
+      setSelectedDate(selectedDate);
+      setIsDateFilterActive(true);
+    }
+  };
+
+  const clearDateFilter = () => {
+    setSelectedDate(null);
+    setIsDateFilterActive(false);
+  };
+
+  const formatDateForDisplay = (date: Date | null) => {
+    if (!date) return '';
+    return date.toLocaleDateString('en-GB');
+  };
+
   const handleDeleteBill = (bill: Bill) => {
     Alert.alert(
       'Delete Bill',
@@ -179,38 +227,39 @@ export default function ViewBillsScreen() {
     );
   };
 
- const confirmDeleteBill = async (billId: number) => {
-  try {
-    // Get the complete bill with items
-    const completeBill = await getBillWithItems(billId);
-    
-    if (!completeBill) {
-      Alert.alert('Error', 'Bill not found');
-      return;
-    }
+  const confirmDeleteBill = async (billId: number) => {
+    try {
+      // Get the complete bill with items
+      const completeBill = await getBillWithItems(billId);
 
-    // Restore stock for all items in the bill
-    if (completeBill.items) {
-      for (const item of completeBill.items) {
-        const product = products.find((p: Product) => p.name === item.itemName);
-        if (product) {
-          const newStock = product.stock + item.quantity;
-          await updateProductStock(product.id, newStock);
+      if (!completeBill) {
+        Alert.alert('Error', 'Bill not found');
+        return;
+      }
+
+      // Restore stock for all items in the bill
+      if (completeBill.items) {
+        for (const item of completeBill.items) {
+          const product = products.find(
+            (p: Product) => p.name === item.itemName,
+          );
+          if (product) {
+            const newStock = product.stock + item.quantity;
+            await updateProductStock(product.id, newStock);
+          }
         }
       }
-    }
 
-    // Delete the bill
-    await deleteBill(billId);
-    
-    Alert.alert('Success', 'Bill deleted successfully');
-    loadBills(); // Refresh the list
-    
-  } catch (error) {
-    console.error('Error deleting bill:', error);
-    Alert.alert('Error', 'Failed to delete bill');
-  }
-};
+      // Delete the bill
+      await deleteBill(billId);
+
+      Alert.alert('Success', 'Bill deleted successfully');
+      loadBills(); // Refresh the list
+    } catch (error) {
+      console.error('Error deleting bill:', error);
+      Alert.alert('Error', 'Failed to delete bill');
+    }
+  };
 
   const handleEditBill = async (bill: Bill) => {
     try {
@@ -235,24 +284,35 @@ export default function ViewBillsScreen() {
           // Find the original product
           const product = products.find(
             (p: Product) => p.name === item.itemName,
-          ) || {
-            id: Date.now() + Math.random(), // Temporary ID for unknown products
-            name: item.itemName,
-            mrp: 0,
-            sellPrice: item.rate, // Use original rate as sell price
-            purchasePrice: 0,
-            stock: 0,
-            unit: 'pcs',
-            category: 'Unknown',
-            minStock: 0,
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-          };
+          );
+
+          if (!product) {
+            // If product not found, create a temporary product
+            return {
+              id: Date.now() + Math.random(),
+              name: item.itemName,
+              mrp: item.rate,
+              sellPrice: item.rate,
+              purchasePrice: item.purchaseRate || 0,
+              stock: 0,
+              unit: 'pcs',
+              categoryId: 0,
+              minStock: 0,
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+              quantity: item.quantity,
+              customRate: item.rate,
+              discount: item.discountPercent,
+              discountedPrice: item.finalRate,
+              itemTotal: item.total,
+              discountAmount: item.discountAmount,
+            };
+          }
 
           return {
             ...product,
             quantity: item.quantity,
-            customRate: item.rate, // Original rate
+            customRate: item.rate,
             discount: item.discountPercent,
             discountedPrice: item.finalRate,
             itemTotal: item.total,
@@ -271,7 +331,7 @@ export default function ViewBillsScreen() {
         if (item.customRate !== undefined) {
           rates[item.id] = item.customRate.toString();
         }
-        if (item.discount !== undefined) {
+        if (item.discount !== undefined && item.discount > 0) {
           discounts[item.id] = item.discount.toString();
         }
       });
@@ -558,6 +618,10 @@ export default function ViewBillsScreen() {
     return 0;
   };
 
+  const getAmountAfterItemDiscount = () => {
+    return getSubtotal() - getTotalItemDiscount();
+  };
+
   const getFinalAmount = () => {
     const subtotal = getSubtotal();
     const itemDiscount = getTotalItemDiscount();
@@ -566,6 +630,39 @@ export default function ViewBillsScreen() {
     return parseFloat(
       (subtotal - itemDiscount - billDiscountAmount).toFixed(2),
     );
+  };
+
+  // Profit calculation functions
+  const getTotalCostPrice = () => {
+    const totalCost = cart.reduce((sum: number, item: CartItem) => {
+      return sum + item.purchasePrice * item.quantity;
+    }, 0);
+    return parseFloat(totalCost.toFixed(2));
+  };
+
+  const getProfitBeforeAnyDiscount = () => {
+    const subtotal = getSubtotal();
+    const totalCost = getTotalCostPrice();
+    return parseFloat((subtotal - totalCost).toFixed(2));
+  };
+
+  const getProfitAfterItemDiscount = () => {
+    const amountAfterItemDiscount = getAmountAfterItemDiscount();
+    const totalCost = getTotalCostPrice();
+    return parseFloat((amountAfterItemDiscount - totalCost).toFixed(2));
+  };
+
+  const getFinalProfit = () => {
+    const finalAmount = getFinalAmount();
+    const totalCost = getTotalCostPrice();
+    return parseFloat((finalAmount - totalCost).toFixed(2));
+  };
+
+  const getProfitMargin = () => {
+    const finalProfit = getFinalProfit();
+    const finalAmount = getFinalAmount();
+    if (finalAmount === 0) return 0;
+    return parseFloat(((finalProfit / finalAmount) * 100).toFixed(2));
   };
 
   const handleUpdateBill = async () => {
@@ -583,8 +680,10 @@ export default function ViewBillsScreen() {
       const totalItemDiscount = getTotalItemDiscount();
       const billDiscountAmount = getBillDiscountAmount();
       const finalAmount = getFinalAmount();
+      const finalProfit = getFinalProfit();
+      const profitMargin = getProfitMargin();
 
-      // Prepare cart items with detailed pricing information
+      // Prepare cart items with detailed pricing information including purchase rate
       const cartItems = cart.map((item: CartItem) => {
         const basePrice = item.customRate || item.sellPrice;
         const finalPrice = item.discountedPrice || basePrice;
@@ -597,11 +696,12 @@ export default function ViewBillsScreen() {
         return {
           name: item.name,
           quantity: item.quantity,
-          rate: basePrice, // Original rate before discount
-          finalRate: finalPrice, // Rate after item discount
-          discountPercent: discountPercent, // Item discount percentage
-          discountAmount: itemDiscountAmount, // Item discount amount
-          total: itemTotal, // Final total for this item
+          rate: basePrice,
+          purchaseRate: item.purchasePrice, // Include purchase price for profit tracking
+          finalRate: finalPrice,
+          discountPercent: discountPercent,
+          discountAmount: itemDiscountAmount,
+          total: itemTotal,
         };
       });
 
@@ -653,9 +753,18 @@ export default function ViewBillsScreen() {
         }
       }
 
-      Alert.alert('Success', 'Bill updated successfully');
+      Alert.alert(
+        'Success',
+        `✅ Bill Updated Successfully!\n\n` +
+          `Bill #${selectedBill.id}\n` +
+          `Customer: ${customerName}\n` +
+          `Final Amount: ₹${finalAmount.toFixed(2)}\n` +
+          `Net Profit: ₹${finalProfit.toFixed(2)}\n` +
+          `Profit Margin: ${profitMargin}%`,
+      );
+
       setShowEditModal(false);
-      loadBills();
+      loadBills(); // Refresh the list
     } catch (error) {
       console.error('Error updating bill:', error);
       Alert.alert('Error', 'Failed to update bill');
@@ -680,6 +789,11 @@ export default function ViewBillsScreen() {
         0,
       ) || 0
     );
+  };
+
+  const getFilterCount = () => {
+    if (filterType === 'All') return bills.length;
+    return bills.filter((bill: Bill) => bill.billType === filterType).length;
   };
 
   if (loading) {
@@ -723,16 +837,134 @@ export default function ViewBillsScreen() {
         </View>
       </LinearGradient>
 
+      {/* Single Date Filter */}
+      <View style={styles.dateFilterSection}>
+        <Text style={styles.filterLabel}>Filter by Date:</Text>
+        <View style={styles.dateContainer}>
+          <TouchableOpacity
+            style={styles.dateButton}
+            onPress={() => setShowDatePicker(true)}
+          >
+            <Calendar size={16} color="#6B7280" />
+            <Text style={styles.dateButtonText}>
+              {selectedDate
+                ? formatDateForDisplay(selectedDate)
+                : 'Select Date'}
+            </Text>
+          </TouchableOpacity>
+          {isDateFilterActive && (
+            <TouchableOpacity
+              style={styles.clearDateButton}
+              onPress={clearDateFilter}
+            >
+              <X size={16} color="#EF4444" />
+              <Text style={styles.clearDateText}>Clear</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      </View>
+
+      {/* Date Picker */}
+      {showDatePicker && (
+        <DateTimePicker
+          value={selectedDate || new Date()}
+          mode="date"
+          display="default"
+          onChange={handleDateChange}
+        />
+      )}
+
+      {/* Bill Type Filter */}
+      <View style={styles.filterSection}>
+        <Text style={styles.filterLabel}>Filter by Bill Type:</Text>
+        <View style={styles.filterButtons}>
+          <TouchableOpacity
+            style={[
+              styles.filterButton,
+              filterType === 'All' && styles.filterButtonActive,
+            ]}
+            onPress={() => setFilterType('All')}
+          >
+            <Text
+              style={[
+                styles.filterButtonText,
+                filterType === 'All' && styles.filterButtonTextActive,
+              ]}
+            >
+              All ({bills.length})
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.filterButton,
+              filterType === 'Cash' && styles.filterButtonCashActive,
+            ]}
+            onPress={() => setFilterType('Cash')}
+          >
+            <IndianRupee
+              size={14}
+              color={filterType === 'Cash' ? '#FFF' : '#059669'}
+            />
+            <Text
+              style={[
+                styles.filterButtonText,
+                filterType === 'Cash' && styles.filterButtonTextActive,
+              ]}
+            >
+              Cash ({bills.filter((b: Bill) => b.billType === 'Cash').length})
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.filterButton,
+              filterType === 'Credit' && styles.filterButtonCreditActive,
+            ]}
+            onPress={() => setFilterType('Credit')}
+          >
+            <CreditCard
+              size={14}
+              color={filterType === 'Credit' ? '#FFF' : '#F59E0B'}
+            />
+            <Text
+              style={[
+                styles.filterButtonText,
+                filterType === 'Credit' && styles.filterButtonTextActive,
+              ]}
+            >
+              Credit (
+              {bills.filter((b: Bill) => b.billType === 'Credit').length})
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
       {/* Search Bar */}
       <View style={styles.searchContainer}>
         <Search size={20} color="#6B7280" />
         <TextInput
           style={styles.searchInput}
-          placeholder="Search by customer name, bill ID, or type..."
+          placeholder="Search by customer name, bill ID..."
           placeholderTextColor="#9CA3AF"
           value={searchQuery}
           onChangeText={setSearchQuery}
         />
+        {searchQuery !== '' && (
+          <TouchableOpacity onPress={() => setSearchQuery('')}>
+            <X size={20} color="#6B7280" />
+          </TouchableOpacity>
+        )}
+      </View>
+
+      {/* Results Count */}
+      <View style={styles.resultsCount}>
+        <Text style={styles.resultsCountText}>
+          Showing {filteredBills.length} of {getFilterCount()} bills
+          {filterType !== 'All' && ` (${filterType})`}
+          {isDateFilterActive && ` on ${formatDateForDisplay(selectedDate)}`}
+          {searchQuery && ` matching "${searchQuery}"`}
+        </Text>
       </View>
 
       {/* Bills List */}
@@ -746,12 +978,18 @@ export default function ViewBillsScreen() {
         {filteredBills.length === 0 ? (
           <View style={styles.emptyState}>
             <Text style={styles.emptyStateText}>
-              {searchQuery ? 'No bills found' : 'No bills available'}
+              {searchQuery || filterType !== 'All' || isDateFilterActive
+                ? 'No bills found'
+                : 'No bills available'}
             </Text>
             <Text style={styles.emptyStateSubtext}>
               {searchQuery
                 ? 'Try a different search term'
-                : 'All bills will appear here'}
+                : filterType !== 'All'
+                  ? `No ${filterType} bills available`
+                  : isDateFilterActive
+                    ? `No bills found on ${formatDateForDisplay(selectedDate)}`
+                    : 'All bills will appear here'}
             </Text>
           </View>
         ) : (
@@ -770,7 +1008,16 @@ export default function ViewBillsScreen() {
                     </View>
                     <View style={styles.metaItem}>
                       <CreditCard size={12} color="#6B7280" />
-                      <Text style={styles.metaText}>{bill.billType}</Text>
+                      <Text
+                        style={[
+                          styles.metaText,
+                          bill.billType === 'Cash'
+                            ? styles.cashText
+                            : styles.creditText,
+                        ]}
+                      >
+                        {bill.billType}
+                      </Text>
                     </View>
                     <View style={styles.metaItem}>
                       <IndianRupee size={12} color="#6B7280" />
@@ -833,6 +1080,15 @@ export default function ViewBillsScreen() {
                       {formatCurrency(bill.billDiscountAmount)})
                     </Text>
                   )}
+                </View>
+              )}
+
+              {/* Profit Display */}
+              {bill.totalProfit !== undefined && bill.totalProfit > 0 && (
+                <View style={styles.profitSummary}>
+                  <Text style={styles.profitText}>
+                    💰 Profit: {formatCurrency(bill.totalProfit)}
+                  </Text>
                 </View>
               )}
             </View>
@@ -947,6 +1203,8 @@ export default function ViewBillsScreen() {
                 const finalPrice = item.discountedPrice || basePrice;
                 const hasDiscount =
                   currentDiscount && parseFloat(currentDiscount) > 0;
+                const itemProfit =
+                  getItemTotal(item) - item.purchasePrice * item.quantity;
 
                 return (
                   <View key={item.id} style={styles.editCartItem}>
@@ -954,8 +1212,8 @@ export default function ViewBillsScreen() {
                       <View style={styles.itemInfo}>
                         <Text style={styles.itemName}>{item.name}</Text>
                         <Text style={styles.itemStock}>
-                          Stock: {item.stock} {item.unit} | MRP: ₹{item.mrp} |
-                          Rate: ₹{item.sellPrice}
+                          Stock: {item.stock} {item.unit} | Cost: ₹
+                          {item.purchasePrice} | MRP: ₹{item.mrp}
                         </Text>
                       </View>
                       <TouchableOpacity
@@ -1036,7 +1294,13 @@ export default function ViewBillsScreen() {
                     </View>
 
                     <View style={styles.itemTotalRow}>
-                      <Text style={styles.itemTotalLabel}>Item Total:</Text>
+                      <View>
+                        <Text style={styles.itemTotalLabel}>Item Total:</Text>
+                        <Text style={styles.itemProfitLabel}>
+                          Profit: {itemProfit >= 0 ? '+' : ''}₹
+                          {itemProfit.toFixed(2)}
+                        </Text>
+                      </View>
                       <Text style={styles.itemTotalAmount}>
                         {formatCurrency(getItemTotal(item))}
                       </Text>
@@ -1059,7 +1323,7 @@ export default function ViewBillsScreen() {
               })}
             </View>
 
-            {/* Price Summary */}
+            {/* Price and Profit Summary */}
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Price Summary</Text>
               <View style={styles.priceSummary}>
@@ -1079,6 +1343,13 @@ export default function ViewBillsScreen() {
                   </View>
                 )}
 
+                <View style={styles.summaryRow}>
+                  <Text style={styles.summaryLabel}>After Item Discount:</Text>
+                  <Text style={styles.summaryValue}>
+                    {formatCurrency(getAmountAfterItemDiscount())}
+                  </Text>
+                </View>
+
                 {billDiscount && parseFloat(billDiscount) > 0 && (
                   <View style={styles.summaryRow}>
                     <Text style={styles.summaryLabel}>
@@ -1095,6 +1366,50 @@ export default function ViewBillsScreen() {
                   <Text style={styles.finalTotalValue}>
                     {formatCurrency(getFinalAmount())}
                   </Text>
+                </View>
+
+                {/* Profit Analysis Section */}
+                <View style={styles.profitSection}>
+                  <Text style={styles.profitSectionTitle}>Profit Analysis</Text>
+
+                  <View style={styles.summaryRow}>
+                    <Text style={styles.summaryLabel}>Total Cost:</Text>
+                    <Text style={styles.summaryValue}>
+                      {formatCurrency(getTotalCostPrice())}
+                    </Text>
+                  </View>
+
+                  <View style={styles.summaryRow}>
+                    <Text style={styles.summaryLabel}>
+                      Profit Before Discount:
+                    </Text>
+                    <Text style={[styles.summaryValue, styles.profitPositive]}>
+                      {formatCurrency(getProfitBeforeAnyDiscount())}
+                    </Text>
+                  </View>
+
+                  <View style={styles.summaryRow}>
+                    <Text style={styles.summaryLabel}>
+                      Profit After Item Disc:
+                    </Text>
+                    <Text style={[styles.summaryValue, styles.profitPositive]}>
+                      {formatCurrency(getProfitAfterItemDiscount())}
+                    </Text>
+                  </View>
+
+                  <View style={[styles.summaryRow, styles.finalProfitRow]}>
+                    <Text style={styles.finalProfitLabel}>Net Profit:</Text>
+                    <Text style={styles.finalProfitValue}>
+                      {formatCurrency(getFinalProfit())}
+                    </Text>
+                  </View>
+
+                  <View style={styles.summaryRow}>
+                    <Text style={styles.summaryLabel}>Profit Margin:</Text>
+                    <Text style={[styles.summaryValue, styles.profitPositive]}>
+                      {getProfitMargin()}%
+                    </Text>
+                  </View>
                 </View>
               </View>
             </View>
@@ -1164,12 +1479,16 @@ export default function ViewBillsScreen() {
                   <View style={styles.productInfo}>
                     <Text style={styles.productName}>{item.name}</Text>
                     <Text style={styles.productDetails}>
-                      {item.category} | Stock: {item.stock} {item.unit}
+                      {item.categoryName || 'Uncategorized'} | Stock:{' '}
+                      {item.stock} {item.unit}
                     </Text>
                     <View style={styles.productPricing}>
                       <Text style={styles.productMrp}>MRP: ₹{item.mrp}</Text>
+                      <Text style={styles.productCost}>
+                        Cost: ₹{item.purchasePrice}
+                      </Text>
                       <Text style={styles.productSellPrice}>
-                        Rate: ₹{item.sellPrice}
+                        Sell: ₹{item.sellPrice}
                       </Text>
                     </View>
                   </View>
@@ -1222,11 +1541,111 @@ const styles = StyleSheet.create({
   headerRight: {
     width: 32,
   },
+  dateFilterSection: {
+    backgroundColor: '#FFF',
+    marginHorizontal: 16,
+    marginTop: 16,
+    marginBottom: 8,
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  dateContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  dateButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F9FAFB',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    gap: 6,
+  },
+  dateButtonText: {
+    fontSize: 14,
+    color: '#374151',
+  },
+  clearDateButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FEF2F2',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#FEE2E2',
+    gap: 4,
+  },
+  clearDateText: {
+    fontSize: 14,
+    color: '#EF4444',
+    fontWeight: '500',
+  },
+  filterSection: {
+    backgroundColor: '#FFF',
+    marginHorizontal: 16,
+    marginTop: 8,
+    marginBottom: 8,
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  filterLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#374151',
+    marginBottom: 8,
+  },
+  filterButtons: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  filterButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+    gap: 4,
+    backgroundColor: '#F3F4F6',
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+  },
+  filterButtonActive: {
+    backgroundColor: '#2563EB',
+    borderColor: '#2563EB',
+  },
+  filterButtonCashActive: {
+    backgroundColor: '#059669',
+    borderColor: '#059669',
+  },
+  filterButtonCreditActive: {
+    backgroundColor: '#F59E0B',
+    borderColor: '#F59E0B',
+  },
+  filterButtonText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#4B5563',
+  },
+  filterButtonTextActive: {
+    color: '#FFF',
+  },
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#FFF',
-    margin: 16,
+    marginHorizontal: 16,
+    marginTop: 8,
+    marginBottom: 4,
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 8,
@@ -1238,6 +1657,15 @@ const styles = StyleSheet.create({
     marginLeft: 8,
     fontSize: 16,
     color: '#111827',
+  },
+  resultsCount: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+  },
+  resultsCountText: {
+    fontSize: 12,
+    color: '#6B7280',
+    fontStyle: 'italic',
   },
   content: {
     flex: 1,
@@ -1316,6 +1744,14 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#6B7280',
   },
+  cashText: {
+    color: '#059669',
+    fontWeight: '600',
+  },
+  creditText: {
+    color: '#F59E0B',
+    fontWeight: '600',
+  },
   billActions: {
     flexDirection: 'row',
     gap: 8,
@@ -1375,6 +1811,17 @@ const styles = StyleSheet.create({
     color: '#059669',
     fontWeight: '500',
     marginBottom: 2,
+  },
+  profitSummary: {
+    borderTopWidth: 1,
+    borderTopColor: '#F3F4F6',
+    paddingTop: 8,
+    marginTop: 8,
+  },
+  profitText: {
+    fontSize: 12,
+    color: '#10B981',
+    fontWeight: '700',
   },
   modalContainer: {
     flex: 1,
@@ -1620,6 +2067,12 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#374151',
   },
+  itemProfitLabel: {
+    fontSize: 12,
+    color: '#059669',
+    fontWeight: '500',
+    marginTop: 2,
+  },
   itemTotalAmount: {
     fontSize: 16,
     fontWeight: '700',
@@ -1659,6 +2112,9 @@ const styles = StyleSheet.create({
   discountValue: {
     color: '#EF4444',
   },
+  profitPositive: {
+    color: '#10B981',
+  },
   finalTotalRow: {
     borderTopWidth: 1,
     borderTopColor: '#E2E8F0',
@@ -1674,6 +2130,35 @@ const styles = StyleSheet.create({
     fontSize: 18,
     color: '#111827',
     fontWeight: '700',
+  },
+  profitSection: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 2,
+    borderTopColor: '#10B981',
+  },
+  profitSectionTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#059669',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  finalProfitRow: {
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#D1D5DB',
+  },
+  finalProfitLabel: {
+    fontSize: 15,
+    color: '#059669',
+    fontWeight: '800',
+  },
+  finalProfitValue: {
+    fontSize: 16,
+    color: '#059669',
+    fontWeight: '800',
   },
   updateButton: {
     backgroundColor: '#2563EB',
@@ -1722,6 +2207,10 @@ const styles = StyleSheet.create({
   productMrp: {
     fontSize: 12,
     color: '#6B7280',
+  },
+  productCost: {
+    fontSize: 12,
+    color: '#EF4444',
   },
   productSellPrice: {
     fontSize: 12,

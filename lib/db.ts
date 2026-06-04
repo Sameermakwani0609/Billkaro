@@ -13,10 +13,12 @@ export type BillItem = {
   itemName: string;
   quantity: number;
   rate: number;
+  purchaseRate: number;
   finalRate: number;
   discountPercent: number;
   discountAmount: number;
   total: number;
+  profit?: number;
 };
 
 export type Bill = {
@@ -31,6 +33,61 @@ export type Bill = {
   subtotal: number;
   itemDiscountAmount: number;
   items?: BillItem[];
+  totalProfit?: number;
+};
+
+export type BillWithPaymentStatus = Bill & {
+  paidAmount: number;
+  remainingAmount: number;
+  paymentStatus: 'Paid' | 'Partial' | 'Unpaid';
+  payments?: Payment[];
+};
+
+export type CustomerCreditSummary = {
+  customerId: number;
+  customerName: string;
+  totalCreditAmount: number;
+  totalPaidAmount: number;
+  remainingAmount: number;
+  bills: BillWithPaymentStatus[];
+};
+
+export type Payment = {
+  id: number;
+  billId: number;
+  customerId: number;
+  amount: number;
+  paymentDate: string;
+  paymentMethod: 'Cash' | 'Card' | 'UPI' | 'Bank Transfer';
+  note?: string;
+  createdAt: string;
+};
+
+export type CustomerStatementItem = {
+  id: number;
+  date: string;
+  type: 'Bill' | 'Payment';
+  billNo?: number;
+  description: string;
+  debit: number;
+  credit: number;
+  balance: number;
+  paymentMethod?: 'Cash' | 'Card' | 'UPI' | 'Bank Transfer';
+  note?: string;
+};
+
+export type CustomerStatement = {
+  customerId: number;
+  customerName: string;
+  customerPhone: string;
+  customerAddress?: string;
+  openingBalance: number;
+  closingBalance: number;
+  totalDebit: number;
+  totalCredit: number;
+  transactions: CustomerStatementItem[];
+  startDate: string;
+  endDate: string;
 };
 
 export type Customer = {
@@ -77,6 +134,40 @@ export type Category = {
 
 export type Contact = Customer | Supplier;
 
+export type ProfitSummary = {
+  totalSales: number;
+  totalProfit: number;
+  profitMargin: number;
+  totalCost: number;
+};
+
+export type PurchaseItem = {
+  id: number;
+  purchaseBillId: number;
+  name: string;
+  mrp: number;
+  purchasePrice: number;
+  sellPrice: number;
+  quantity: number;
+  unit: string;
+  total: number;
+  categoryId?: number | null;
+  categoryName?: string;
+};
+
+export type PurchaseBill = {
+  id: number;
+  supplierName: string;
+  supplierId: number;
+  billNo: string;
+  billType: 'Cash' | 'Credit';
+  date: string;
+  totalAmount: number;
+  createdAt: string;
+  updatedAt: string;
+  items?: PurchaseItem[];
+};
+
 // --- Database ---
 let db: SQLite.SQLiteDatabase | null = null;
 let isInitialized = false;
@@ -88,7 +179,6 @@ export function initDB() {
   try {
     db = SQLite.openDatabaseSync('wholesale.db');
 
-    // Users table
     db.execSync(`
       CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -97,7 +187,6 @@ export function initDB() {
       );
     `);
 
-    // Categories table - only id and name
     db.execSync(`
       CREATE TABLE IF NOT EXISTS categories (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -105,7 +194,6 @@ export function initDB() {
       );
     `);
 
-    // Bills table
     db.execSync(`
       CREATE TABLE IF NOT EXISTS bills (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -122,7 +210,6 @@ export function initDB() {
       );
     `);
 
-    // Bill Items table
     db.execSync(`
       CREATE TABLE IF NOT EXISTS bill_items (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -130,6 +217,7 @@ export function initDB() {
         itemName TEXT,
         quantity INTEGER,
         rate REAL,
+        purchaseRate REAL DEFAULT 0,
         finalRate REAL,
         discountPercent REAL DEFAULT 0,
         discountAmount REAL DEFAULT 0,
@@ -138,7 +226,6 @@ export function initDB() {
       );
     `);
 
-    // Customers table
     db.execSync(`
       CREATE TABLE IF NOT EXISTS customers (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -151,7 +238,6 @@ export function initDB() {
       );
     `);
 
-    // Suppliers table
     db.execSync(`
       CREATE TABLE IF NOT EXISTS suppliers (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -164,7 +250,6 @@ export function initDB() {
       );
     `);
 
-    // Products table with categoryId
     db.execSync(`
       CREATE TABLE IF NOT EXISTS products (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -181,6 +266,126 @@ export function initDB() {
         FOREIGN KEY(categoryId) REFERENCES categories(id) ON DELETE SET NULL
       );
     `);
+
+    db.execSync(`
+      CREATE TABLE IF NOT EXISTS purchase_bills (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        supplierName TEXT NOT NULL,
+        supplierId INTEGER NOT NULL,
+        billNo TEXT NOT NULL UNIQUE,
+        billType TEXT CHECK(billType IN ('Cash', 'Credit')),
+        date TEXT NOT NULL,
+        totalAmount REAL NOT NULL,
+        createdAt TEXT DEFAULT CURRENT_TIMESTAMP,
+        updatedAt TEXT DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY(supplierId) REFERENCES suppliers(id) ON DELETE CASCADE
+      );
+    `);
+
+    db.execSync(`
+      CREATE TABLE IF NOT EXISTS purchase_items (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        purchaseBillId INTEGER NOT NULL,
+        name TEXT NOT NULL,
+        mrp REAL NOT NULL,
+        purchasePrice REAL NOT NULL,
+        sellPrice REAL NOT NULL,
+        quantity REAL NOT NULL,
+        unit TEXT NOT NULL,
+        total REAL NOT NULL,
+        categoryId INTEGER,
+        FOREIGN KEY(purchaseBillId) REFERENCES purchase_bills(id) ON DELETE CASCADE,
+        FOREIGN KEY(categoryId) REFERENCES categories(id) ON DELETE SET NULL
+      );
+    `);
+
+    db.execSync(`
+      CREATE TABLE IF NOT EXISTS payments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        billId INTEGER NOT NULL,
+        customerId INTEGER NOT NULL,
+        amount REAL NOT NULL,
+        paymentDate TEXT NOT NULL,
+        paymentMethod TEXT CHECK(paymentMethod IN ('Cash', 'Card', 'UPI', 'Bank Transfer')) NOT NULL,
+        note TEXT,
+        createdAt TEXT DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY(billId) REFERENCES bills(id) ON DELETE CASCADE,
+        FOREIGN KEY(customerId) REFERENCES customers(id) ON DELETE CASCADE
+      );
+    `);
+
+    // Migrations
+    try {
+      const tableInfo = db!.getAllSync<any>('PRAGMA table_info(bill_items)');
+      const hasPurchaseRate = tableInfo.some(
+        (col) => col.name === 'purchaseRate',
+      );
+
+      if (!hasPurchaseRate) {
+        console.log('Migrating bill_items table to add purchaseRate column...');
+        db!.execSync(
+          'ALTER TABLE bill_items ADD COLUMN purchaseRate REAL DEFAULT 0;',
+        );
+        console.log('Migration completed successfully');
+      }
+    } catch (error) {
+      console.error('Error migrating bill_items table:', error);
+    }
+
+    try {
+      const purchaseItemsInfo = db!.getAllSync<any>(
+        'PRAGMA table_info(purchase_items)',
+      );
+      const hasCategoryId = purchaseItemsInfo.some(
+        (col) => col.name === 'categoryId',
+      );
+
+      if (!hasCategoryId) {
+        console.log(
+          'Migrating purchase_items table to add categoryId column...',
+        );
+        db!.execSync(
+          'ALTER TABLE purchase_items ADD COLUMN categoryId INTEGER REFERENCES categories(id) ON DELETE SET NULL;',
+        );
+        console.log('Purchase items migration completed successfully');
+      }
+    } catch (error) {
+      console.error('Error migrating purchase_items table:', error);
+    }
+
+    try {
+      const billsInfo = db!.getAllSync<any>('PRAGMA table_info(bills)');
+      const hasIsFullyPaid = billsInfo.some(
+        (col) => col.name === 'isFullyPaid',
+      );
+
+      if (!hasIsFullyPaid) {
+        console.log('Migrating bills table to add isFullyPaid column...');
+        db!.execSync(
+          'ALTER TABLE bills ADD COLUMN isFullyPaid INTEGER DEFAULT 0;',
+        );
+        console.log('Migration completed successfully');
+      }
+    } catch (error) {
+      console.error('Error migrating bills table:', error);
+    }
+
+    try {
+      const billsInfo = db!.getAllSync<any>('PRAGMA table_info(bills)');
+      const hasRemainingAmount = billsInfo.some(
+        (col) => col.name === 'remainingAmount',
+      );
+
+      if (!hasRemainingAmount) {
+        console.log('Migrating bills table to add remainingAmount column...');
+        db!.execSync(
+          'ALTER TABLE bills ADD COLUMN remainingAmount REAL DEFAULT 0;',
+        );
+        console.log('Migration completed successfully');
+      }
+    } catch (error) {
+      console.error('Error migrating bills table:', error);
+    }
 
     isInitialized = true;
     console.log('DB initialized successfully');
@@ -272,12 +477,12 @@ export function updateCategory(id: number, name: string): Promise<void> {
     }
   });
 }
+
 export function deleteCategory(id: number): Promise<void> {
   return new Promise((resolve, reject) => {
     try {
       ensureDBInitialized();
 
-      // Check if category is used by any products
       const checkResult = db!.getAllSync<any>(
         'SELECT COUNT(*) as count FROM products WHERE categoryId = ?;',
         [id],
@@ -460,6 +665,7 @@ export function insertBill(
     name: string;
     quantity: number;
     rate: number;
+    purchaseRate: number;
     finalRate: number;
     discountPercent: number;
     discountAmount: number;
@@ -474,9 +680,13 @@ export function insertBill(
     try {
       ensureDBInitialized();
       db!.withTransactionSync(() => {
+        const remainingAmount = billType === 'Credit' ? totalAmount : 0;
+        const isFullyPaid = billType === 'Credit' ? 0 : 1;
+
         const billStatement = db!.prepareSync(
-          'INSERT INTO bills (customerId, customerName, billType, billingDate, totalAmount, billDiscountPercent, billDiscountAmount, subtotal, itemDiscountAmount) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+          'INSERT INTO bills (customerId, customerName, billType, billingDate, totalAmount, billDiscountPercent, billDiscountAmount, subtotal, itemDiscountAmount, remainingAmount, isFullyPaid) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
         );
+
         const billResult = billStatement.executeSync([
           customerId,
           customerName,
@@ -487,6 +697,8 @@ export function insertBill(
           billDiscountAmount,
           subtotal,
           itemDiscountAmount,
+          remainingAmount,
+          isFullyPaid,
         ]);
         const billId = billResult.lastInsertRowId;
         billStatement.finalizeSync();
@@ -494,7 +706,7 @@ export function insertBill(
         if (!billId) throw new Error('Failed to insert bill');
 
         const itemStatement = db!.prepareSync(
-          'INSERT INTO bill_items (billId, itemName, quantity, rate, finalRate, discountPercent, discountAmount, total) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+          'INSERT INTO bill_items (billId, itemName, quantity, rate, purchaseRate, finalRate, discountPercent, discountAmount, total) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
         );
 
         for (const item of cart) {
@@ -503,6 +715,7 @@ export function insertBill(
             item.name,
             item.quantity,
             item.rate,
+            item.purchaseRate,
             item.finalRate,
             item.discountPercent,
             item.discountAmount,
@@ -513,6 +726,7 @@ export function insertBill(
         resolve(billId);
       });
     } catch (error) {
+      console.error('Error inserting bill:', error);
       reject(error);
     }
   });
@@ -552,7 +766,7 @@ export function getBillItems(billId: number): Promise<BillItem[]> {
     try {
       ensureDBInitialized();
       const result = db!.getAllSync<any>(
-        'SELECT id, billId, itemName, quantity, rate, finalRate, discountPercent, discountAmount, total FROM bill_items WHERE billId = ?;',
+        'SELECT id, billId, itemName, quantity, rate, purchaseRate, finalRate, discountPercent, discountAmount, total FROM bill_items WHERE billId = ?;',
         [billId],
       );
 
@@ -562,10 +776,12 @@ export function getBillItems(billId: number): Promise<BillItem[]> {
         itemName: item.itemName,
         quantity: item.quantity,
         rate: item.rate,
+        purchaseRate: item.purchaseRate || 0,
         finalRate: item.finalRate,
         discountPercent: item.discountPercent || 0,
         discountAmount: item.discountAmount || 0,
         total: item.total,
+        profit: item.total - item.purchaseRate * item.quantity,
       }));
 
       resolve(items);
@@ -605,21 +821,30 @@ export function getBillWithItems(billId: number): Promise<Bill | null> {
       };
 
       const itemsResult = db!.getAllSync<any>(
-        'SELECT id, billId, itemName, quantity, rate, finalRate, discountPercent, discountAmount, total FROM bill_items WHERE billId = ?;',
+        'SELECT id, billId, itemName, quantity, rate, purchaseRate, finalRate, discountPercent, discountAmount, total FROM bill_items WHERE billId = ?;',
         [billId],
       );
 
-      bill.items = itemsResult.map((item: any) => ({
-        id: item.id,
-        billId: item.billId,
-        itemName: item.itemName,
-        quantity: item.quantity,
-        rate: item.rate,
-        finalRate: item.finalRate,
-        discountPercent: item.discountPercent || 0,
-        discountAmount: item.discountAmount || 0,
-        total: item.total,
-      }));
+      let totalProfit = 0;
+      bill.items = itemsResult.map((item: any) => {
+        const profit = item.total - item.purchaseRate * item.quantity;
+        totalProfit += profit;
+        return {
+          id: item.id,
+          billId: item.billId,
+          itemName: item.itemName,
+          quantity: item.quantity,
+          rate: item.rate,
+          purchaseRate: item.purchaseRate || 0,
+          finalRate: item.finalRate,
+          discountPercent: item.discountPercent || 0,
+          discountAmount: item.discountAmount || 0,
+          total: item.total,
+          profit: profit,
+        };
+      });
+
+      bill.totalProfit = totalProfit;
 
       resolve(bill);
     } catch (error) {
@@ -652,6 +877,12 @@ export function deleteBill(billId: number): Promise<void> {
         );
         deleteItemsStatement.executeSync([billId]);
         deleteItemsStatement.finalizeSync();
+
+        const deletePaymentsStatement = db!.prepareSync(
+          'DELETE FROM payments WHERE billId = ?',
+        );
+        deletePaymentsStatement.executeSync([billId]);
+        deletePaymentsStatement.finalizeSync();
 
         const deleteBillStatement = db!.prepareSync(
           'DELETE FROM bills WHERE id = ?',
@@ -694,6 +925,7 @@ export function updateBill(
     name: string;
     quantity: number;
     rate: number;
+    purchaseRate: number;
     finalRate: number;
     discountPercent: number;
     discountAmount: number;
@@ -732,7 +964,7 @@ export function updateBill(
         deleteItemsStatement.finalizeSync();
 
         const insertItemStatement = db!.prepareSync(
-          'INSERT INTO bill_items (billId, itemName, quantity, rate, finalRate, discountPercent, discountAmount, total) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+          'INSERT INTO bill_items (billId, itemName, quantity, rate, purchaseRate, finalRate, discountPercent, discountAmount, total) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
         );
         for (const item of cart) {
           insertItemStatement.executeSync([
@@ -740,6 +972,7 @@ export function updateBill(
             item.name,
             item.quantity,
             item.rate,
+            item.purchaseRate,
             item.finalRate,
             item.discountPercent,
             item.discountAmount,
@@ -759,7 +992,423 @@ export function getBills(): Promise<Bill[]> {
   return getAllBills();
 }
 
-// --- Product Functions with Category Support ---
+// --- Payment Functions ---
+
+export function insertPayment(
+  billId: number,
+  customerId: number,
+  amount: number,
+  paymentMethod: 'Cash' | 'Card' | 'UPI' | 'Bank Transfer',
+  note?: string,
+): Promise<number> {
+  return new Promise((resolve, reject) => {
+    try {
+      ensureDBInitialized();
+      db!.withTransactionSync(() => {
+        const paymentDate = new Date().toISOString().split('T')[0];
+
+        const paymentStatement = db!.prepareSync(
+          'INSERT INTO payments (billId, customerId, amount, paymentDate, paymentMethod, note) VALUES (?, ?, ?, ?, ?, ?)',
+        );
+        const result = paymentStatement.executeSync([
+          billId,
+          customerId,
+          amount,
+          paymentDate,
+          paymentMethod,
+          note || null,
+        ]);
+        const paymentId = result.lastInsertRowId;
+        paymentStatement.finalizeSync();
+
+        const bill = db!.getAllSync<any>(
+          'SELECT totalAmount, remainingAmount FROM bills WHERE id = ?;',
+          [billId],
+        );
+
+        if (bill.length > 0) {
+          const totalAmount = bill[0].totalAmount;
+          const currentRemaining =
+            bill[0].remainingAmount !== undefined
+              ? bill[0].remainingAmount
+              : totalAmount;
+          const newRemaining = currentRemaining - amount;
+          const isFullyPaid = newRemaining <= 0 ? 1 : 0;
+
+          const updateBillStatement = db!.prepareSync(
+            'UPDATE bills SET remainingAmount = ?, isFullyPaid = ? WHERE id = ?',
+          );
+          updateBillStatement.executeSync([
+            Math.max(0, newRemaining),
+            isFullyPaid,
+            billId,
+          ]);
+          updateBillStatement.finalizeSync();
+        }
+
+        resolve(paymentId);
+      });
+    } catch (error) {
+      reject(error);
+    }
+  });
+}
+
+export function getPaymentsByBillId(billId: number): Promise<Payment[]> {
+  return new Promise((resolve) => {
+    try {
+      ensureDBInitialized();
+      const result = db!.getAllSync<any>(
+        'SELECT * FROM payments WHERE billId = ? ORDER BY paymentDate DESC, id DESC;',
+        [billId],
+      );
+      resolve(result);
+    } catch (error) {
+      console.error('Error getting payments:', error);
+      resolve([]);
+    }
+  });
+}
+
+export function getBillWithPaymentStatus(
+  billId: number,
+): Promise<BillWithPaymentStatus | null> {
+  return new Promise(async (resolve) => {
+    try {
+      ensureDBInitialized();
+      const bill = await getBillWithItems(billId);
+
+      if (!bill) {
+        resolve(null);
+        return;
+      }
+
+      const payments = await getPaymentsByBillId(billId);
+      const paidAmount = payments.reduce((sum, p) => sum + p.amount, 0);
+      const remainingAmount = bill.totalAmount - paidAmount;
+
+      let paymentStatus: 'Paid' | 'Partial' | 'Unpaid' = 'Unpaid';
+      if (remainingAmount <= 0) {
+        paymentStatus = 'Paid';
+      } else if (paidAmount > 0) {
+        paymentStatus = 'Partial';
+      }
+
+      resolve({
+        ...bill,
+        paidAmount,
+        remainingAmount: Math.max(0, remainingAmount),
+        paymentStatus,
+        payments,
+      });
+    } catch (error) {
+      console.error('Error getting bill with payment status:', error);
+      resolve(null);
+    }
+  });
+}
+
+export function getAllCreditBillsUnpaid(): Promise<CustomerCreditSummary[]> {
+  return new Promise((resolve) => {
+    try {
+      ensureDBInitialized();
+
+      const bills = db!.getAllSync<any>(
+        `SELECT 
+          b.*, 
+          COALESCE((SELECT SUM(amount) FROM payments WHERE billId = b.id), 0) as paidAmount,
+          CASE 
+            WHEN b.remainingAmount IS NOT NULL AND b.remainingAmount > 0 THEN b.remainingAmount
+            WHEN b.remainingAmount IS NULL THEN b.totalAmount
+            ELSE b.totalAmount - COALESCE((SELECT SUM(amount) FROM payments WHERE billId = b.id), 0)
+          END as calculatedRemaining
+         FROM bills b
+         WHERE b.billType = 'Credit' 
+         AND (b.isFullyPaid = 0 OR b.isFullyPaid IS NULL)
+         AND b.totalAmount > COALESCE((SELECT SUM(amount) FROM payments WHERE billId = b.id), 0)
+         ORDER BY b.customerName, b.billingDate DESC;`,
+      );
+
+      const customerMap = new Map<number, CustomerCreditSummary>();
+
+      for (const bill of bills) {
+        const remainingAmount = bill.calculatedRemaining;
+        const paidAmount = bill.paidAmount || 0;
+
+        if (remainingAmount <= 0) continue;
+
+        if (!customerMap.has(bill.customerId)) {
+          customerMap.set(bill.customerId, {
+            customerId: bill.customerId,
+            customerName: bill.customerName,
+            totalCreditAmount: 0,
+            totalPaidAmount: 0,
+            remainingAmount: 0,
+            bills: [],
+          });
+        }
+
+        const customerSummary = customerMap.get(bill.customerId)!;
+        customerSummary.totalCreditAmount += bill.totalAmount;
+        customerSummary.totalPaidAmount += paidAmount;
+        customerSummary.remainingAmount += remainingAmount;
+        customerSummary.bills.push({
+          ...bill,
+          paidAmount,
+          remainingAmount,
+          paymentStatus:
+            remainingAmount <= 0
+              ? 'Paid'
+              : paidAmount > 0
+                ? 'Partial'
+                : 'Unpaid',
+        });
+      }
+
+      resolve(Array.from(customerMap.values()));
+    } catch (error) {
+      console.error('Error getting unpaid credit bills:', error);
+      resolve([]);
+    }
+  });
+}
+
+export function getCustomerCreditDetails(
+  customerId: number,
+): Promise<CustomerCreditSummary | null> {
+  return new Promise((resolve) => {
+    try {
+      ensureDBInitialized();
+
+      const bills = db!.getAllSync<any>(
+        `SELECT b.*, 
+                COALESCE((SELECT SUM(amount) FROM payments WHERE billId = b.id), 0) as paidAmount,
+                COALESCE(b.remainingAmount, b.totalAmount - COALESCE((SELECT SUM(amount) FROM payments WHERE billId = b.id), 0)) as remainingAmount
+         FROM bills b
+         WHERE b.customerId = ? AND b.billType = 'Credit'
+         ORDER BY b.billingDate DESC, b.id DESC;`,
+        [customerId],
+      );
+
+      if (bills.length === 0) {
+        resolve(null);
+        return;
+      }
+
+      const customerName = bills[0].customerName;
+      let totalCreditAmount = 0;
+      let totalPaidAmount = 0;
+      let remainingAmount = 0;
+      const billsWithStatus = [];
+
+      for (const bill of bills) {
+        const paidAmount = bill.paidAmount;
+        const billRemaining = bill.remainingAmount;
+
+        totalCreditAmount += bill.totalAmount;
+        totalPaidAmount += paidAmount;
+        remainingAmount += billRemaining;
+
+        billsWithStatus.push({
+          ...bill,
+          paidAmount,
+          remainingAmount: billRemaining,
+          paymentStatus:
+            billRemaining <= 0 ? 'Paid' : paidAmount > 0 ? 'Partial' : 'Unpaid',
+        });
+      }
+
+      resolve({
+        customerId,
+        customerName,
+        totalCreditAmount,
+        totalPaidAmount,
+        remainingAmount,
+        bills: billsWithStatus,
+      });
+    } catch (error) {
+      console.error('Error getting customer credit details:', error);
+      resolve(null);
+    }
+  });
+}
+
+export function getCustomerPaymentHistory(
+  customerId: number,
+): Promise<Payment[]> {
+  return new Promise((resolve) => {
+    try {
+      ensureDBInitialized();
+      const result = db!.getAllSync<any>(
+        `SELECT p.*, b.billNo, b.totalAmount as billTotalAmount
+         FROM payments p
+         JOIN bills b ON p.billId = b.id
+         WHERE p.customerId = ?
+         ORDER BY p.paymentDate DESC, p.id DESC;`,
+        [customerId],
+      );
+      resolve(result);
+    } catch (error) {
+      console.error('Error getting customer payment history:', error);
+      resolve([]);
+    }
+  });
+}
+
+// --- Customer Statement Functions ---
+
+export function getCustomerStatement(
+  customerId: number,
+  startDate: string,
+  endDate: string,
+): Promise<CustomerStatement> {
+  return new Promise((resolve, reject) => {
+    try {
+      ensureDBInitialized();
+
+      const customer = db!.getAllSync<any>(
+        'SELECT id, name, phone, address FROM customers WHERE id = ?;',
+        [customerId],
+      );
+
+      if (customer.length === 0) {
+        reject(new Error('Customer not found'));
+        return;
+      }
+
+      // Get opening balance - ONLY CREDIT BILLS before start date
+      const openingBills = db!.getAllSync<any>(
+        `SELECT COALESCE(SUM(totalAmount), 0) as total 
+         FROM bills 
+         WHERE customerId = ? 
+         AND billType = 'Credit'
+         AND billingDate < ?;`,
+        [customerId, startDate],
+      );
+
+      // Get all payments before start date
+      const openingPayments = db!.getAllSync<any>(
+        `SELECT COALESCE(SUM(amount), 0) as total 
+         FROM payments 
+         WHERE customerId = ? 
+         AND paymentDate < ?;`,
+        [customerId, startDate],
+      );
+
+      // Opening Balance = Credit Bills - Payments
+      const openingBalance =
+        (openingBills[0]?.total || 0) - (openingPayments[0]?.total || 0);
+
+      // Get ONLY CREDIT BILLS within date range (Cash bills are excluded)
+      const bills = db!.getAllSync<any>(
+        `SELECT 
+          b.id,
+          b.billingDate as date,
+          b.totalAmount as amount,
+          b.billType
+         FROM bills b
+         WHERE b.customerId = ? 
+         AND b.billType = 'Credit'
+         AND b.billingDate BETWEEN ? AND ?
+         ORDER BY b.billingDate ASC, b.id ASC;`,
+        [customerId, startDate, endDate],
+      );
+
+      // Get all payments within date range
+      const payments = db!.getAllSync<any>(
+        `SELECT 
+          p.id,
+          p.paymentDate as date,
+          p.amount,
+          p.paymentMethod,
+          p.note,
+          p.billId
+         FROM payments p
+         WHERE p.customerId = ? 
+         AND p.paymentDate BETWEEN ? AND ?
+         ORDER BY p.paymentDate ASC, p.id ASC;`,
+        [customerId, startDate, endDate],
+      );
+
+      // Combine transactions
+      const allTransactions: CustomerStatementItem[] = [];
+
+      // Add ONLY CREDIT BILLS as debit entries
+      for (const bill of bills) {
+        allTransactions.push({
+          id: bill.id,
+          date: bill.date,
+          type: 'Bill',
+          billNo: bill.id,
+          description: `Credit Bill #${bill.id}`,
+          debit: bill.amount,
+          credit: 0,
+          balance: 0,
+          paymentMethod: undefined,
+          note: undefined,
+        });
+      }
+
+      // Add ALL payments as credit entries
+      for (const payment of payments) {
+        allTransactions.push({
+          id: payment.id,
+          date: payment.date,
+          type: 'Payment',
+          billNo: payment.billId,
+          description: `Payment received via ${payment.paymentMethod}${payment.note ? ` - ${payment.note}` : ''}`,
+          debit: 0,
+          credit: payment.amount,
+          balance: 0,
+          paymentMethod: payment.paymentMethod,
+          note: payment.note,
+        });
+      }
+
+      // Sort by date
+      allTransactions.sort(
+        (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
+      );
+
+      // Calculate running balance
+      let runningBalance = openingBalance;
+      let totalDebit = 0;
+      let totalCredit = 0;
+
+      for (const transaction of allTransactions) {
+        if (transaction.type === 'Bill') {
+          runningBalance = runningBalance + transaction.debit;
+          totalDebit += transaction.debit;
+        } else {
+          runningBalance = runningBalance - transaction.credit;
+          totalCredit += transaction.credit;
+        }
+        transaction.balance = runningBalance;
+      }
+
+      const closingBalance = runningBalance;
+
+      resolve({
+        customerId: customer[0].id,
+        customerName: customer[0].name,
+        customerPhone: customer[0].phone,
+        customerAddress: customer[0].address,
+        openingBalance: openingBalance,
+        closingBalance: closingBalance,
+        totalDebit: totalDebit,
+        totalCredit: totalCredit,
+        transactions: allTransactions,
+        startDate: startDate,
+        endDate: endDate,
+      });
+    } catch (error) {
+      console.error('Error getting customer statement:', error);
+      reject(error);
+    }
+  });
+}
+
+// --- Product Functions ---
 export function getAllProducts(): Promise<Product[]> {
   return new Promise((resolve) => {
     try {
@@ -964,6 +1613,113 @@ export function updateProductStock(
   });
 }
 
+// --- Profit Calculation Functions ---
+export function getBillProfit(billId: number): Promise<{
+  totalProfit: number;
+  items: { itemName: string; profit: number; quantity: number }[];
+}> {
+  return new Promise((resolve) => {
+    try {
+      ensureDBInitialized();
+      const items = db!.getAllSync<any>(
+        'SELECT itemName, quantity, purchaseRate, total FROM bill_items WHERE billId = ?;',
+        [billId],
+      );
+
+      let totalProfit = 0;
+      const profitItems = items.map((item) => {
+        const purchaseTotal = item.purchaseRate * item.quantity;
+        const profit = item.total - purchaseTotal;
+        totalProfit += profit;
+        return {
+          itemName: item.itemName,
+          quantity: item.quantity,
+          profit: profit,
+        };
+      });
+
+      resolve({
+        totalProfit: totalProfit,
+        items: profitItems,
+      });
+    } catch (error) {
+      console.error('Error calculating bill profit:', error);
+      resolve({ totalProfit: 0, items: [] });
+    }
+  });
+}
+
+export function getProfitSummary(
+  startDate: string,
+  endDate: string,
+): Promise<ProfitSummary> {
+  return new Promise((resolve) => {
+    try {
+      ensureDBInitialized();
+      const result = db!.getAllSync<any>(
+        `SELECT 
+          SUM(b.totalAmount) as totalSales,
+          SUM(bi.total - (bi.purchaseRate * bi.quantity)) as totalProfit,
+          SUM(bi.purchaseRate * bi.quantity) as totalCost
+         FROM bills b
+         JOIN bill_items bi ON b.id = bi.billId
+         WHERE b.billingDate BETWEEN ? AND ?;`,
+        [startDate, endDate],
+      );
+
+      const totalSales = result[0]?.totalSales || 0;
+      const totalProfit = result[0]?.totalProfit || 0;
+      const totalCost = result[0]?.totalCost || 0;
+      const profitMargin =
+        totalSales > 0 ? (totalProfit / totalSales) * 100 : 0;
+
+      resolve({
+        totalSales: totalSales,
+        totalProfit: totalProfit,
+        profitMargin: profitMargin,
+        totalCost: totalCost,
+      });
+    } catch (error) {
+      console.error('Error getting profit summary:', error);
+      resolve({ totalSales: 0, totalProfit: 0, profitMargin: 0, totalCost: 0 });
+    }
+  });
+}
+
+export function getAllBillsWithProfit(): Promise<Bill[]> {
+  return new Promise((resolve) => {
+    try {
+      ensureDBInitialized();
+      const bills = db!.getAllSync<any>(
+        `SELECT DISTINCT b.*, 
+          (SELECT SUM(bi.total - (bi.purchaseRate * bi.quantity)) 
+           FROM bill_items bi WHERE bi.billId = b.id) as totalProfit
+         FROM bills b
+         ORDER BY b.id DESC;`,
+      );
+
+      const result: Bill[] = bills.map((bill: any) => ({
+        id: bill.id,
+        customerId: bill.customerId,
+        customerName: bill.customerName,
+        billType: bill.billType,
+        billingDate: bill.billingDate,
+        totalAmount: bill.totalAmount,
+        billDiscountPercent: bill.billDiscountPercent || 0,
+        billDiscountAmount: bill.billDiscountAmount || 0,
+        subtotal: bill.subtotal || 0,
+        itemDiscountAmount: bill.itemDiscountAmount || 0,
+        totalProfit: bill.totalProfit || 0,
+      }));
+
+      resolve(result);
+    } catch (error) {
+      console.error('Error getting bills with profit:', error);
+      resolve([]);
+    }
+  });
+}
+
 // --- Supplier Functions ---
 export function insertSupplier(
   name: string,
@@ -1136,6 +1892,250 @@ export function searchContactsByName(name: string): Promise<Contact[]> {
     } catch (error) {
       console.error('Error searching contacts:', error);
       resolve([]);
+    }
+  });
+}
+
+// --- Purchase Bill Functions ---
+export function insertPurchaseBill(
+  supplierName: string,
+  supplierId: number,
+  billNo: string,
+  billType: 'Cash' | 'Credit',
+  date: string,
+  totalAmount: number,
+  items: {
+    name: string;
+    mrp: number;
+    purchasePrice: number;
+    sellPrice: number;
+    quantity: number;
+    unit: string;
+    total: number;
+    categoryId?: number | null;
+  }[],
+): Promise<number> {
+  return new Promise((resolve, reject) => {
+    try {
+      ensureDBInitialized();
+      db!.withTransactionSync(() => {
+        const billStatement = db!.prepareSync(
+          'INSERT INTO purchase_bills (supplierName, supplierId, billNo, billType, date, totalAmount) VALUES (?, ?, ?, ?, ?, ?)',
+        );
+        const billResult = billStatement.executeSync([
+          supplierName,
+          supplierId,
+          billNo,
+          billType,
+          date,
+          totalAmount,
+        ]);
+        const purchaseBillId = billResult.lastInsertRowId;
+        billStatement.finalizeSync();
+
+        if (!purchaseBillId) throw new Error('Failed to insert purchase bill');
+
+        const itemStatement = db!.prepareSync(
+          'INSERT INTO purchase_items (purchaseBillId, name, mrp, purchasePrice, sellPrice, quantity, unit, total, categoryId) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        );
+
+        for (const item of items) {
+          itemStatement.executeSync([
+            purchaseBillId,
+            item.name,
+            item.mrp,
+            item.purchasePrice,
+            item.sellPrice,
+            item.quantity,
+            item.unit,
+            item.total,
+            item.categoryId || null,
+          ]);
+        }
+        itemStatement.finalizeSync();
+
+        resolve(purchaseBillId);
+      });
+    } catch (error) {
+      reject(error);
+    }
+  });
+}
+
+export function getAllPurchaseBills(): Promise<PurchaseBill[]> {
+  return new Promise((resolve) => {
+    try {
+      ensureDBInitialized();
+      const result = db!.getAllSync<any>(
+        'SELECT * FROM purchase_bills ORDER BY id DESC;',
+      );
+      resolve(result);
+    } catch (error) {
+      console.error('Error getting purchase bills:', error);
+      resolve([]);
+    }
+  });
+}
+
+export function getPurchaseBillWithItems(
+  billId: number,
+): Promise<PurchaseBill | null> {
+  return new Promise((resolve) => {
+    try {
+      ensureDBInitialized();
+
+      const billResult = db!.getAllSync<any>(
+        'SELECT * FROM purchase_bills WHERE id = ?;',
+        [billId],
+      );
+
+      if (billResult.length === 0) {
+        resolve(null);
+        return;
+      }
+
+      const bill: PurchaseBill = {
+        id: billResult[0].id,
+        supplierName: billResult[0].supplierName,
+        supplierId: billResult[0].supplierId,
+        billNo: billResult[0].billNo,
+        billType: billResult[0].billType,
+        date: billResult[0].date,
+        totalAmount: billResult[0].totalAmount,
+        createdAt: billResult[0].createdAt,
+        updatedAt: billResult[0].updatedAt,
+      };
+
+      const itemsResult = db!.getAllSync<any>(
+        'SELECT * FROM purchase_items WHERE purchaseBillId = ?;',
+        [billId],
+      );
+
+      bill.items = itemsResult.map((item: any) => ({
+        id: item.id,
+        purchaseBillId: item.purchaseBillId,
+        name: item.name,
+        mrp: item.mrp,
+        purchasePrice: item.purchasePrice,
+        sellPrice: item.sellPrice,
+        quantity: item.quantity,
+        unit: item.unit,
+        total: item.total,
+        categoryId: item.categoryId || null,
+      }));
+
+      resolve(bill);
+    } catch (error) {
+      console.error('Error getting purchase bill with items:', error);
+      resolve(null);
+    }
+  });
+}
+
+export function updatePurchaseBill(
+  billId: number,
+  supplierName: string,
+  supplierId: number,
+  billNo: string,
+  billType: 'Cash' | 'Credit',
+  date: string,
+  totalAmount: number,
+  items: {
+    name: string;
+    mrp: number;
+    purchasePrice: number;
+    sellPrice: number;
+    quantity: number;
+    unit: string;
+    total: number;
+    categoryId?: number | null;
+  }[],
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    try {
+      ensureDBInitialized();
+      db!.withTransactionSync(() => {
+        const updateBillStatement = db!.prepareSync(
+          'UPDATE purchase_bills SET supplierName = ?, supplierId = ?, billNo = ?, billType = ?, date = ?, totalAmount = ?, updatedAt = CURRENT_TIMESTAMP WHERE id = ?',
+        );
+        updateBillStatement.executeSync([
+          supplierName,
+          supplierId,
+          billNo,
+          billType,
+          date,
+          totalAmount,
+          billId,
+        ]);
+        updateBillStatement.finalizeSync();
+
+        const deleteItemsStatement = db!.prepareSync(
+          'DELETE FROM purchase_items WHERE purchaseBillId = ?',
+        );
+        deleteItemsStatement.executeSync([billId]);
+        deleteItemsStatement.finalizeSync();
+
+        const insertItemStatement = db!.prepareSync(
+          'INSERT INTO purchase_items (purchaseBillId, name, mrp, purchasePrice, sellPrice, quantity, unit, total, categoryId) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        );
+
+        for (const item of items) {
+          insertItemStatement.executeSync([
+            billId,
+            item.name,
+            item.mrp,
+            item.purchasePrice,
+            item.sellPrice,
+            item.quantity,
+            item.unit,
+            item.total,
+            item.categoryId || null,
+          ]);
+        }
+        insertItemStatement.finalizeSync();
+      });
+      resolve();
+    } catch (error) {
+      reject(error);
+    }
+  });
+}
+
+export function deletePurchaseBill(billId: number): Promise<void> {
+  return new Promise((resolve, reject) => {
+    try {
+      ensureDBInitialized();
+
+      const items = db!.getAllSync<any>(
+        'SELECT * FROM purchase_items WHERE purchaseBillId = ?;',
+        [billId],
+      );
+
+      for (const item of items) {
+        const product = db!.getAllSync<any>(
+          'SELECT * FROM products WHERE name = ? AND mrp = ? AND purchasePrice = ? AND unit = ?;',
+          [item.name, item.mrp, item.purchasePrice, item.unit],
+        );
+
+        if (product.length > 0) {
+          const newStock = Math.max(0, product[0].stock - item.quantity);
+          const updateStockStatement = db!.prepareSync(
+            'UPDATE products SET stock = ?, updatedAt = CURRENT_TIMESTAMP WHERE id = ?',
+          );
+          updateStockStatement.executeSync([newStock, product[0].id]);
+          updateStockStatement.finalizeSync();
+        }
+      }
+
+      const statement = db!.prepareSync(
+        'DELETE FROM purchase_bills WHERE id = ?',
+      );
+      statement.executeSync([billId]);
+      statement.finalizeSync();
+
+      resolve();
+    } catch (error) {
+      reject(error);
     }
   });
 }
