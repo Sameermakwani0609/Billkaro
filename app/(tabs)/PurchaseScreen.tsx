@@ -1,5 +1,6 @@
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Picker } from '@react-native-picker/picker';
+import { LinearGradient } from 'expo-linear-gradient';
 import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -9,6 +10,7 @@ import {
   KeyboardAvoidingView,
   Modal,
   Platform,
+  StatusBar,
   StyleSheet,
   Text,
   TextInput,
@@ -35,6 +37,7 @@ interface PurchaseItem {
   unit: string;
   total: number;
   categoryId?: number | null;
+  categoryName?: string;
 }
 
 export default function PurchaseScreen() {
@@ -63,6 +66,7 @@ export default function PurchaseScreen() {
     quantity: '',
     unit: 'pcs',
     categoryId: null as number | null,
+    categoryName: '',
   });
 
   const [items, setItems] = useState<PurchaseItem[]>([]);
@@ -80,6 +84,7 @@ export default function PurchaseScreen() {
     try {
       const categoryList = await getAllCategories();
       setCategories(categoryList);
+      console.log('📦 Categories loaded:', categoryList);
     } catch (error) {
       console.error('Error loading categories:', error);
     }
@@ -155,6 +160,18 @@ export default function PurchaseScreen() {
   };
 
   const addItem = () => {
+    // Debug logging
+    console.log('🔍 Adding item - Form Data:', {
+      name: itemForm.name,
+      mrp: itemForm.mrp,
+      purchasePrice: itemForm.purchasePrice,
+      sellPrice: itemForm.sellPrice,
+      quantity: itemForm.quantity,
+      unit: itemForm.unit,
+      categoryId: itemForm.categoryId,
+      categoryName: itemForm.categoryName,
+    });
+
     if (
       !itemForm.name ||
       !itemForm.mrp ||
@@ -169,6 +186,18 @@ export default function PurchaseScreen() {
     const total =
       parseFloat(itemForm.sellPrice) * parseFloat(itemForm.quantity);
 
+    // Get category name if categoryId is selected
+    const selectedCategory = categories.find(
+      (c) => c.id === itemForm.categoryId,
+    );
+    const categoryName = selectedCategory ? selectedCategory.name : '';
+
+    console.log('📌 Selected Category:', {
+      id: itemForm.categoryId,
+      name: categoryName,
+      availableCategories: categories,
+    });
+
     if (itemForm.id) {
       // Edit existing item
       const updatedItems = items.map((item) =>
@@ -182,11 +211,16 @@ export default function PurchaseScreen() {
               quantity: parseFloat(itemForm.quantity),
               unit: itemForm.unit,
               categoryId: itemForm.categoryId,
+              categoryName: categoryName,
               total,
             }
           : item,
       );
       setItems(updatedItems);
+      console.log(
+        '✏️ Item updated:',
+        updatedItems.find((i) => i.id === itemForm.id),
+      );
     } else {
       // Add new item
       const newItem: PurchaseItem = {
@@ -198,11 +232,14 @@ export default function PurchaseScreen() {
         quantity: parseFloat(itemForm.quantity),
         unit: itemForm.unit,
         categoryId: itemForm.categoryId,
+        categoryName: categoryName,
         total,
       };
       setItems([...items, newItem]);
+      console.log('➕ New item added:', newItem);
     }
 
+    // Reset form
     setItemForm({
       id: '',
       name: '',
@@ -212,10 +249,12 @@ export default function PurchaseScreen() {
       quantity: '',
       unit: 'pcs',
       categoryId: null,
+      categoryName: '',
     });
   };
 
   const editItem = (item: PurchaseItem) => {
+    console.log('✏️ Editing item:', item);
     setItemForm({
       id: item.id,
       name: item.name,
@@ -225,6 +264,7 @@ export default function PurchaseScreen() {
       quantity: item.quantity.toString(),
       unit: item.unit,
       categoryId: item.categoryId || null,
+      categoryName: item.categoryName || '',
     });
   };
 
@@ -234,7 +274,10 @@ export default function PurchaseScreen() {
       {
         text: 'Delete',
         style: 'destructive',
-        onPress: () => setItems(items.filter((item) => item.id !== id)),
+        onPress: () => {
+          setItems(items.filter((item) => item.id !== id));
+          console.log('🗑️ Item deleted, ID:', id);
+        },
       },
     ]);
   };
@@ -274,9 +317,9 @@ export default function PurchaseScreen() {
         await updateProduct(
           exactMatch.id,
           exactMatch.name,
-          exactMatch.mrp, // Keep existing MRP
-          exactMatch.sellPrice, // Keep existing selling price
-          exactMatch.purchasePrice, // Keep existing purchase price
+          exactMatch.mrp,
+          exactMatch.sellPrice,
+          exactMatch.purchasePrice,
           newStock,
           exactMatch.unit,
           exactMatch.categoryId,
@@ -396,6 +439,7 @@ export default function PurchaseScreen() {
         unit: item.unit,
         total: item.total,
         categoryId: item.categoryId || null,
+        categoryName: item.categoryName || '',
       }));
 
       await insertPurchaseBill(
@@ -502,10 +546,10 @@ export default function PurchaseScreen() {
         <Text style={styles.itemName} numberOfLines={1}>
           {item.name}
         </Text>
-        {item.categoryId && (
+        {(item.categoryId || item.categoryName) && (
           <View style={styles.categoryBadge}>
             <Text style={styles.categoryBadgeText}>
-              {getCategoryName(item.categoryId)}
+              {item.categoryName || getCategoryName(item.categoryId)}
             </Text>
           </View>
         )}
@@ -592,8 +636,16 @@ export default function PurchaseScreen() {
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      {/* Sticky Header */}
+      <StatusBar backgroundColor="#0F172A" barStyle="light-content" />
+
+      {/* Sticky Header with Dashboard Theme */}
       <Animated.View style={[styles.stickyHeader, { height: headerHeight }]}>
+        <LinearGradient
+          colors={['#0F172A', '#1E3A8A', '#1D4ED8']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={StyleSheet.absoluteFill}
+        />
         <Animated.Text
           style={[styles.stickyTitle, { fontSize: titleFontSize }]}
         >
@@ -653,7 +705,7 @@ export default function PurchaseScreen() {
                       ? 'Select Supplier'
                       : 'Enter supplier name'
                   }
-                  placeholderTextColor="#999"
+                  placeholderTextColor="#94A3B8"
                   returnKeyType="next"
                   editable={!isSupplierSelected}
                 />
@@ -675,7 +727,7 @@ export default function PurchaseScreen() {
                 value={billNo}
                 onChangeText={setBillNo}
                 placeholder="Enter bill number"
-                placeholderTextColor="#999"
+                placeholderTextColor="#94A3B8"
                 returnKeyType="next"
               />
             </View>
@@ -725,6 +777,15 @@ export default function PurchaseScreen() {
             <Text style={styles.cardTitle}>
               {itemForm.id ? '✏️ Edit Item' : '➕ Add New Item'}
             </Text>
+            {itemForm.categoryId && (
+              <View style={styles.selectedCategoryHint}>
+                <Text style={styles.selectedCategoryHintText}>
+                  Selected:{' '}
+                  {itemForm.categoryName ||
+                    getCategoryName(itemForm.categoryId)}
+                </Text>
+              </View>
+            )}
           </View>
 
           {/* Item Name and Unit in same row */}
@@ -738,7 +799,7 @@ export default function PurchaseScreen() {
                   setItemForm({ ...itemForm, name: text })
                 }
                 placeholder="Enter item name"
-                placeholderTextColor="#999"
+                placeholderTextColor="#94A3B8"
                 returnKeyType="next"
               />
             </View>
@@ -770,7 +831,7 @@ export default function PurchaseScreen() {
                 value={itemForm.mrp}
                 onChangeText={(text) => setItemForm({ ...itemForm, mrp: text })}
                 placeholder="0.00"
-                placeholderTextColor="#999"
+                placeholderTextColor="#94A3B8"
                 keyboardType="decimal-pad"
                 returnKeyType="next"
               />
@@ -785,7 +846,7 @@ export default function PurchaseScreen() {
                   setItemForm({ ...itemForm, purchasePrice: text })
                 }
                 placeholder="0.00"
-                placeholderTextColor="#999"
+                placeholderTextColor="#94A3B8"
                 keyboardType="decimal-pad"
                 returnKeyType="next"
               />
@@ -800,7 +861,7 @@ export default function PurchaseScreen() {
                   setItemForm({ ...itemForm, sellPrice: text })
                 }
                 placeholder="0.00"
-                placeholderTextColor="#999"
+                placeholderTextColor="#94A3B8"
                 keyboardType="decimal-pad"
                 returnKeyType="next"
               />
@@ -818,7 +879,7 @@ export default function PurchaseScreen() {
                   setItemForm({ ...itemForm, quantity: text })
                 }
                 placeholder="0"
-                placeholderTextColor="#999"
+                placeholderTextColor="#94A3B8"
                 keyboardType="decimal-pad"
                 returnKeyType="done"
                 onSubmitEditing={addItem}
@@ -832,15 +893,25 @@ export default function PurchaseScreen() {
                   selectedValue={
                     itemForm.categoryId ? itemForm.categoryId.toString() : ''
                   }
-                  onValueChange={(value) =>
+                  onValueChange={(value) => {
+                    const selectedId = value ? parseInt(value) : null;
+                    const selectedCategory = categories.find(
+                      (c) => c.id === selectedId,
+                    );
+                    console.log('📋 Category Selected:', {
+                      id: selectedId,
+                      name: selectedCategory?.name,
+                      allCategories: categories,
+                    });
                     setItemForm({
                       ...itemForm,
-                      categoryId: value ? parseInt(value) : null,
-                    })
-                  }
+                      categoryId: selectedId,
+                      categoryName: selectedCategory?.name || '',
+                    });
+                  }}
                   style={styles.picker}
                 >
-                  <Picker.Item label="Select Category" value="" />
+                  <Picker.Item label="-- Select Category --" value="" />
                   {categories.map((cat) => (
                     <Picker.Item
                       key={cat.id}
@@ -943,7 +1014,7 @@ export default function PurchaseScreen() {
               <TextInput
                 style={styles.modalSearchInput}
                 placeholder="🔍 Search by name, company or phone..."
-                placeholderTextColor="#999"
+                placeholderTextColor="#94A3B8"
                 value={modalSearchText}
                 onChangeText={handleModalSearch}
                 autoFocus={true}
@@ -960,7 +1031,7 @@ export default function PurchaseScreen() {
 
             {loadingSuppliers ? (
               <View style={styles.loadingContainer}>
-                <ActivityIndicator size="large" color="#2563eb" />
+                <ActivityIndicator size="large" color="#3B82F6" />
                 <Text style={styles.loadingText}>Loading suppliers...</Text>
               </View>
             ) : filteredSuppliers.length === 0 ? (
@@ -997,35 +1068,36 @@ export default function PurchaseScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f0f9ff',
+    backgroundColor: '#F1F5F9',
   },
   stickyHeader: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
-    backgroundColor: '#2563eb',
-    borderBottomLeftRadius: 20,
-    borderBottomRightRadius: 20,
-    shadowColor: '#000',
+    borderBottomLeftRadius: 32,
+    borderBottomRightRadius: 32,
+    shadowColor: '#1E3A8A',
     shadowOffset: {
       width: 0,
       height: 4,
     },
-    shadowOpacity: 0.1,
-    shadowRadius: 6,
+    shadowOpacity: 0.2,
+    shadowRadius: 10,
     elevation: 8,
     zIndex: 1000,
     paddingHorizontal: 24,
     justifyContent: 'center',
+    overflow: 'hidden',
   },
   stickyTitle: {
-    fontWeight: '700',
+    fontWeight: '900',
     color: '#ffffff',
     marginBottom: 4,
+    letterSpacing: 0.5,
   },
   stickySubtitle: {
-    color: '#dbeafe',
+    color: '#93C5FD',
     fontWeight: '500',
   },
   scrollView: {
@@ -1036,41 +1108,52 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
     margin: 16,
     marginBottom: 12,
-    borderRadius: 16,
+    borderRadius: 20,
     padding: 20,
-    shadowColor: '#000',
+    shadowColor: '#94A3B8',
     shadowOffset: {
       width: 0,
       height: 2,
     },
     shadowOpacity: 0.08,
-    shadowRadius: 4,
+    shadowRadius: 8,
     elevation: 4,
     borderWidth: 1,
-    borderColor: '#e0f2fe',
+    borderColor: '#F1F5F9',
   },
   summaryCard: {
     backgroundColor: '#ffffff',
     margin: 16,
     marginBottom: 12,
-    borderRadius: 16,
+    borderRadius: 20,
     padding: 20,
-    shadowColor: '#000',
+    shadowColor: '#94A3B8',
     shadowOffset: {
       width: 0,
       height: 2,
     },
     shadowOpacity: 0.08,
-    shadowRadius: 4,
+    shadowRadius: 8,
     elevation: 4,
     borderWidth: 1,
-    borderColor: '#e0f2fe',
+    borderColor: '#F1F5F9',
   },
   cardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 16,
+  },
+  selectedCategoryHint: {
+    backgroundColor: '#EFF6FF',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  selectedCategoryHintText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#3B82F6',
   },
   summaryHeader: {
     flexDirection: 'row',
@@ -1080,8 +1163,9 @@ const styles = StyleSheet.create({
   },
   cardTitle: {
     fontSize: 18,
-    fontWeight: '600',
-    color: '#1e293b',
+    fontWeight: '800',
+    color: '#0F172A',
+    letterSpacing: 0.3,
   },
   formRow: {
     flexDirection: 'row',
@@ -1097,58 +1181,60 @@ const styles = StyleSheet.create({
     minWidth: 100,
   },
   label: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '600',
     color: '#475569',
     marginBottom: 6,
+    letterSpacing: 0.3,
   },
   input: {
     borderWidth: 1.5,
-    borderColor: '#cbd5e1',
-    borderRadius: 10,
+    borderColor: '#E2E8F0',
+    borderRadius: 12,
     paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 16,
+    paddingVertical: 12,
+    fontSize: 15,
     backgroundColor: '#ffffff',
-    color: '#1e293b',
+    color: '#0F172A',
   },
   selectedSupplierInput: {
-    backgroundColor: '#f8fafc',
-    color: '#1e293b',
-    borderColor: '#2563eb',
+    backgroundColor: '#EFF6FF',
+    color: '#0F172A',
+    borderColor: '#3B82F6',
   },
   priceInput: {
     borderWidth: 1.5,
-    borderColor: '#cbd5e1',
-    borderRadius: 10,
+    borderColor: '#E2E8F0',
+    borderRadius: 12,
     paddingHorizontal: 8,
-    paddingVertical: 10,
+    paddingVertical: 12,
     fontSize: 14,
     backgroundColor: '#ffffff',
-    color: '#1e293b',
+    color: '#0F172A',
     textAlign: 'center',
   },
   pickerContainer: {
     borderWidth: 1.5,
-    borderColor: '#cbd5e1',
-    borderRadius: 10,
+    borderColor: '#E2E8F0',
+    borderRadius: 12,
     backgroundColor: '#ffffff',
     overflow: 'hidden',
   },
   picker: {
-    color: '#1e293b',
+    color: '#0F172A',
   },
   dateButton: {
     borderWidth: 1.5,
-    borderColor: '#cbd5e1',
-    borderRadius: 10,
+    borderColor: '#E2E8F0',
+    borderRadius: 12,
     paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingVertical: 12,
     backgroundColor: '#ffffff',
   },
   dateText: {
-    fontSize: 16,
-    color: '#1e293b',
+    fontSize: 15,
+    color: '#0F172A',
+    fontWeight: '500',
   },
   statusBadge: {
     paddingHorizontal: 12,
@@ -1156,42 +1242,47 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   cashBadge: {
-    backgroundColor: '#dcfce7',
+    backgroundColor: '#D1FAE5',
   },
   creditBadge: {
-    backgroundColor: '#fef3c7',
+    backgroundColor: '#FEF3C7',
   },
   statusText: {
     fontSize: 12,
-    fontWeight: '600',
-    color: '#166534',
+    fontWeight: '700',
+    color: '#065F46',
   },
   addButton: {
-    backgroundColor: '#2563eb',
+    backgroundColor: '#3B82F6',
     paddingVertical: 12,
-    borderRadius: 10,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: 8,
+    shadowColor: '#3B82F6',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
   },
   updateButton: {
-    backgroundColor: '#7c3aed',
+    backgroundColor: '#8B5CF6',
   },
   addButtonText: {
     color: '#ffffff',
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: 15,
+    fontWeight: '700',
   },
   itemsCount: {
-    backgroundColor: '#dbeafe',
-    paddingHorizontal: 8,
+    backgroundColor: '#EFF6FF',
+    paddingHorizontal: 10,
     paddingVertical: 4,
-    borderRadius: 6,
+    borderRadius: 8,
   },
   itemsCountText: {
     fontSize: 12,
-    fontWeight: '600',
-    color: '#2563eb',
+    fontWeight: '700',
+    color: '#3B82F6',
   },
   emptyState: {
     alignItems: 'center',
@@ -1199,12 +1290,13 @@ const styles = StyleSheet.create({
   },
   emptyStateText: {
     fontSize: 16,
-    color: '#64748b',
+    fontWeight: '600',
+    color: '#64748B',
     marginBottom: 4,
   },
   emptyStateSubtext: {
     fontSize: 14,
-    color: '#94a3b8',
+    color: '#94A3B8',
   },
   billSummary: {
     alignItems: 'center',
@@ -1212,24 +1304,24 @@ const styles = StyleSheet.create({
   },
   totalAmount: {
     fontSize: 18,
-    fontWeight: '700',
-    color: '#059669',
+    fontWeight: '800',
+    color: '#10B981',
   },
   itemCard: {
     backgroundColor: '#ffffff',
     marginHorizontal: 16,
-    marginBottom: 8,
-    borderRadius: 12,
+    marginBottom: 10,
+    borderRadius: 16,
     padding: 16,
     borderWidth: 1,
-    borderColor: '#e0f2fe',
-    shadowColor: '#000',
+    borderColor: '#F1F5F9',
+    shadowColor: '#94A3B8',
     shadowOffset: {
       width: 0,
       height: 1,
     },
     shadowOpacity: 0.05,
-    shadowRadius: 2,
+    shadowRadius: 4,
     elevation: 3,
   },
   itemHeader: {
@@ -1239,31 +1331,31 @@ const styles = StyleSheet.create({
   },
   itemIndex: {
     fontSize: 12,
-    fontWeight: '600',
-    color: '#2563eb',
-    backgroundColor: '#dbeafe',
-    paddingHorizontal: 6,
+    fontWeight: '700',
+    color: '#3B82F6',
+    backgroundColor: '#EFF6FF',
+    paddingHorizontal: 8,
     paddingVertical: 2,
-    borderRadius: 4,
+    borderRadius: 6,
     marginRight: 8,
   },
   itemName: {
     fontSize: 16,
-    fontWeight: '600',
-    color: '#1f2937',
+    fontWeight: '700',
+    color: '#0F172A',
     flex: 1,
   },
   categoryBadge: {
-    backgroundColor: '#dbeafe',
-    paddingHorizontal: 8,
+    backgroundColor: '#EFF6FF',
+    paddingHorizontal: 10,
     paddingVertical: 4,
-    borderRadius: 6,
+    borderRadius: 8,
     marginLeft: 8,
   },
   categoryBadgeText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#2563eb',
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#3B82F6',
   },
   itemDetails: {
     marginBottom: 12,
@@ -1277,18 +1369,18 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   detailLabel: {
-    fontSize: 12,
-    color: '#6b7280',
+    fontSize: 11,
+    color: '#64748B',
     marginBottom: 2,
     fontWeight: '500',
   },
   detailValue: {
     fontSize: 14,
-    color: '#374151',
+    color: '#334155',
     fontWeight: '600',
   },
   totalText: {
-    color: '#059669',
+    color: '#10B981',
     fontSize: 15,
   },
   itemActions: {
@@ -1298,19 +1390,19 @@ const styles = StyleSheet.create({
   actionButton: {
     flex: 1,
     paddingVertical: 8,
-    borderRadius: 8,
+    borderRadius: 10,
     alignItems: 'center',
   },
   editButton: {
-    backgroundColor: '#dbeafe',
+    backgroundColor: '#EFF6FF',
   },
   deleteButton: {
-    backgroundColor: '#fee2e2',
+    backgroundColor: '#FEF2F2',
   },
   actionText: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '600',
-    color: '#1e293b',
+    color: '#334155',
   },
   footer: {
     padding: 16,
@@ -1318,27 +1410,27 @@ const styles = StyleSheet.create({
     marginBottom: 30,
   },
   saveButton: {
-    backgroundColor: '#059669',
+    backgroundColor: '#10B981',
     paddingVertical: 16,
-    borderRadius: 12,
+    borderRadius: 14,
     alignItems: 'center',
-    shadowColor: '#000',
+    shadowColor: '#10B981',
     shadowOffset: {
       width: 0,
-      height: 2,
+      height: 4,
     },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
     elevation: 5,
   },
   disabledButton: {
-    backgroundColor: '#94a3b8',
+    backgroundColor: '#94A3B8',
     opacity: 0.7,
   },
   saveButtonText: {
     color: '#ffffff',
-    fontSize: 18,
-    fontWeight: '700',
+    fontSize: 16,
+    fontWeight: '800',
   },
   supplierInputContainer: {
     position: 'relative',
@@ -1346,17 +1438,17 @@ const styles = StyleSheet.create({
   clearButton: {
     position: 'absolute',
     right: 12,
-    top: 10,
+    top: 12,
     width: 24,
     height: 24,
     borderRadius: 12,
-    backgroundColor: '#e2e8f0',
+    backgroundColor: '#F1F5F9',
     justifyContent: 'center',
     alignItems: 'center',
   },
   clearButtonText: {
     fontSize: 14,
-    color: '#64748b',
+    color: '#64748B',
     fontWeight: '600',
   },
   modalOverlay: {
@@ -1367,7 +1459,7 @@ const styles = StyleSheet.create({
   },
   modalContent: {
     backgroundColor: '#ffffff',
-    borderRadius: 16,
+    borderRadius: 20,
     width: '90%',
     maxHeight: '80%',
     shadowColor: '#000',
@@ -1385,41 +1477,41 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#e2e8f0',
+    borderBottomColor: '#F1F5F9',
   },
   modalTitle: {
     fontSize: 18,
-    fontWeight: '600',
-    color: '#1e293b',
+    fontWeight: '700',
+    color: '#0F172A',
   },
   closeButton: {
     width: 30,
     height: 30,
     borderRadius: 15,
-    backgroundColor: '#f1f5f9',
+    backgroundColor: '#F1F5F9',
     justifyContent: 'center',
     alignItems: 'center',
   },
   closeButtonText: {
     fontSize: 16,
-    color: '#64748b',
+    color: '#64748B',
     fontWeight: '600',
   },
   modalSearchContainer: {
     padding: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#e2e8f0',
+    borderBottomColor: '#F1F5F9',
     position: 'relative',
   },
   modalSearchInput: {
     borderWidth: 1.5,
-    borderColor: '#cbd5e1',
-    borderRadius: 10,
+    borderColor: '#E2E8F0',
+    borderRadius: 12,
     paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 16,
+    paddingVertical: 12,
+    fontSize: 15,
     backgroundColor: '#ffffff',
-    color: '#1e293b',
+    color: '#0F172A',
     paddingRight: 35,
   },
   modalClearButton: {
@@ -1429,25 +1521,25 @@ const styles = StyleSheet.create({
     width: 24,
     height: 24,
     borderRadius: 12,
-    backgroundColor: '#e2e8f0',
+    backgroundColor: '#F1F5F9',
     justifyContent: 'center',
     alignItems: 'center',
   },
   modalClearButtonText: {
     fontSize: 12,
-    color: '#64748b',
+    color: '#64748B',
     fontWeight: '600',
   },
   resultCountContainer: {
     paddingHorizontal: 16,
     paddingVertical: 8,
-    backgroundColor: '#f0f9ff',
+    backgroundColor: '#F0F9FF',
     borderBottomWidth: 1,
-    borderBottomColor: '#e0f2fe',
+    borderBottomColor: '#E0F2FE',
   },
   resultCountText: {
     fontSize: 12,
-    color: '#2563eb',
+    color: '#3B82F6',
     fontWeight: '600',
   },
   supplierList: {
@@ -1457,7 +1549,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#f1f5f9',
+    borderBottomColor: '#F1F5F9',
   },
   supplierItemContent: {
     gap: 4,
@@ -1465,15 +1557,15 @@ const styles = StyleSheet.create({
   supplierName: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#1e293b',
+    color: '#0F172A',
   },
   supplierCompany: {
     fontSize: 14,
-    color: '#64748b',
+    color: '#64748B',
   },
   supplierPhone: {
     fontSize: 12,
-    color: '#94a3b8',
+    color: '#94A3B8',
   },
   loadingContainer: {
     padding: 40,
@@ -1482,7 +1574,7 @@ const styles = StyleSheet.create({
   loadingText: {
     marginTop: 12,
     fontSize: 14,
-    color: '#64748b',
+    color: '#64748B',
   },
   emptyModalState: {
     padding: 40,
@@ -1490,12 +1582,12 @@ const styles = StyleSheet.create({
   },
   emptyModalText: {
     fontSize: 16,
-    color: '#64748b',
+    color: '#64748B',
     marginBottom: 4,
   },
   emptyModalSubtext: {
     fontSize: 14,
-    color: '#94a3b8',
+    color: '#94A3B8',
     textAlign: 'center',
   },
 });

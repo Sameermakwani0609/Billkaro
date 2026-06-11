@@ -1,4 +1,6 @@
+import * as FileSystem from 'expo-file-system/legacy'; // ← the only import change needed
 import * as SQLite from 'expo-sqlite';
+import { Platform } from 'react-native';
 
 // --- Types ---
 export type User = {
@@ -66,14 +68,12 @@ export type Payment = {
 export type CustomerStatementItem = {
   id: number;
   date: string;
-  type: 'Bill' | 'Payment';
-  billNo?: number;
+  billNo: string;
+  billType: string;
   description: string;
-  debit: number;
-  credit: number;
+  billAmount: number;
+  received: number;
   balance: number;
-  paymentMethod?: 'Cash' | 'Card' | 'UPI' | 'Bank Transfer';
-  note?: string;
 };
 
 export type CustomerStatement = {
@@ -83,8 +83,8 @@ export type CustomerStatement = {
   customerAddress?: string;
   openingBalance: number;
   closingBalance: number;
-  totalDebit: number;
-  totalCredit: number;
+  totalCreditAmount: number;
+  totalReceivedAmount: number;
   transactions: CustomerStatementItem[];
   startDate: string;
   endDate: string;
@@ -166,6 +166,30 @@ export type PurchaseBill = {
   createdAt: string;
   updatedAt: string;
   items?: PurchaseItem[];
+};
+
+export interface AppSettings {
+  shopName: string;
+  shopAddress: string;
+  shopPhone: string;
+  shopEmail: string;
+  topTagline: string;
+  bottomTagline: string;
+}
+
+export interface ItemSalesSummary {
+  productName: string;
+  totalQuantity: number;
+  totalAmount: number;
+  pricePerUnit?: number;
+}
+
+export type PartySummaryBill = {
+  id: number;
+  billNo: string;
+  customerName: string;
+  billType: string;
+  totalAmount: number;
 };
 
 // --- Database ---
@@ -314,6 +338,14 @@ export function initDB() {
       );
     `);
 
+    db.execSync(`
+      CREATE TABLE IF NOT EXISTS app_settings (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        key TEXT UNIQUE NOT NULL,
+        value TEXT NOT NULL
+      );
+    `);
+
     // Migrations
     try {
       const tableInfo = db!.getAllSync<any>('PRAGMA table_info(bill_items)');
@@ -408,6 +440,139 @@ function ensureDBInitialized() {
     initDB();
   }
 }
+
+// --- FIXED Backup and Restore Functions ---
+
+// Helper — collects all rows from every table
+const getAllTableData = async () => {
+  const tables = [
+    'customers',
+    'suppliers',
+    'products',
+    'categories',
+    'bills',
+    'bill_items',
+    'payments',
+    'purchase_bills',
+    'purchase_items',
+    'app_settings',
+  ];
+  const data: Record<string, any[]> = {};
+  for (const table of tables) {
+    try {
+      data[table] = db!.getAllSync(`SELECT * FROM ${table}`);
+    } catch {
+      data[table] = [];
+    }
+  }
+  return data;
+};
+
+// ─── Backup ───────────────────────────────────────────────────────────────────
+// Returns a blob URL on web, or a file URI on native.
+export const backupDatabase = async (): Promise<string> => {
+  ensureDBInitialized();
+  if (!db) throw new Error('Database not initialised');
+
+  const tables = await getAllTableData();
+  const payload = JSON.stringify(
+    { version: '1.0', timestamp: new Date().toISOString(), data: tables },
+    null,
+    2,
+  );
+
+  if (Platform.OS === 'web') {
+    const blob = new Blob([payload], { type: 'application/json' });
+    return URL.createObjectURL(blob);
+  }
+
+  // Native — documentDirectory is always writable, no permissions needed
+  const fileUri = `${FileSystem.documentDirectory}backup_${Date.now()}.json`;
+  await FileSystem.writeAsStringAsync(fileUri, payload, {
+    encoding: FileSystem.EncodingType.UTF8,
+  });
+  return fileUri;
+};
+
+// ─── Restore ──────────────────────────────────────────────────────────────────
+// Accepts a blob URL (web) or a file URI (native).
+export const restoreDatabase = async (backupPath: string): Promise<void> => {
+  ensureDBInitialized();
+  if (!db) throw new Error('Database not initialised');
+
+  let payload: string;
+
+  if (Platform.OS === 'web') {
+    const res = await fetch(backupPath);
+    if (!res.ok) throw new Error(`Could not read backup: HTTP ${res.status}`);
+    payload = await res.text();
+  } else {
+    payload = await FileSystem.readAsStringAsync(backupPath, {
+      encoding: FileSystem.EncodingType.UTF8,
+    });
+  }
+
+  const backup = JSON.parse(payload);
+  if (!backup?.data) throw new Error('Invalid backup: missing "data" field');
+
+  // FK-safe deletion order
+  const deleteOrder = [
+    'payments',
+    'bill_items',
+    'bills',
+    'purchase_items',
+    'purchase_bills',
+    'products',
+    'categories',
+    'suppliers',
+    'customers',
+    'app_settings',
+  ];
+
+  db!.withTransactionSync(() => {
+    // 1. Clear tables
+    for (const table of deleteOrder) {
+      try {
+        db!.execSync(`DELETE FROM ${table}`);
+        db!.execSync(`DELETE FROM sqlite_sequence WHERE name='${table}'`);
+      } catch {
+        // Table may not exist yet on a fresh install — safe to skip
+      }
+    }
+
+    // 2. Re-insert rows
+    for (const [table, rows] of Object.entries(backup.data) as [
+      string,
+      any[],
+    ][]) {
+      if (!Array.isArray(rows) || rows.length === 0) continue;
+
+      for (const row of rows) {
+        const cols = Object.keys(row);
+        if (cols.length === 0) continue;
+
+        const placeholders = cols.map(() => '?').join(', ');
+        const values = cols.map((c) => {
+          const v = row[c];
+          if (v === null || v === undefined) return null;
+          if (typeof v === 'boolean') return v ? 1 : 0;
+          if (typeof v === 'object') return JSON.stringify(v);
+          return v;
+        });
+
+        try {
+          const stmt = db!.prepareSync(
+            `INSERT INTO ${table} (${cols.join(', ')}) VALUES (${placeholders})`,
+          );
+          stmt.executeSync(values);
+          stmt.finalizeSync();
+        } catch (err) {
+          console.warn(`Skipping row in "${table}":`, err);
+        }
+      }
+    }
+  });
+};
 
 // --- Category Functions ---
 export function insertCategory(name: string): Promise<number> {
@@ -1276,30 +1441,26 @@ export function getCustomerStatement(
         return;
       }
 
-      // Get opening balance - ONLY CREDIT BILLS before start date
       const openingBills = db!.getAllSync<any>(
         `SELECT COALESCE(SUM(totalAmount), 0) as total 
          FROM bills 
          WHERE customerId = ? 
          AND billType = 'Credit'
-         AND billingDate < ?;`,
+         AND date(billingDate) < date(?);`,
         [customerId, startDate],
       );
 
-      // Get all payments before start date
       const openingPayments = db!.getAllSync<any>(
         `SELECT COALESCE(SUM(amount), 0) as total 
          FROM payments 
          WHERE customerId = ? 
-         AND paymentDate < ?;`,
+         AND date(paymentDate) < date(?);`,
         [customerId, startDate],
       );
 
-      // Opening Balance = Credit Bills - Payments
       const openingBalance =
         (openingBills[0]?.total || 0) - (openingPayments[0]?.total || 0);
 
-      // Get ONLY CREDIT BILLS within date range (Cash bills are excluded)
       const bills = db!.getAllSync<any>(
         `SELECT 
           b.id,
@@ -1308,82 +1469,94 @@ export function getCustomerStatement(
           b.billType
          FROM bills b
          WHERE b.customerId = ? 
-         AND b.billType = 'Credit'
-         AND b.billingDate BETWEEN ? AND ?
+         AND date(b.billingDate) BETWEEN date(?) AND date(?)
          ORDER BY b.billingDate ASC, b.id ASC;`,
         [customerId, startDate, endDate],
       );
 
-      // Get all payments within date range
       const payments = db!.getAllSync<any>(
         `SELECT 
           p.id,
           p.paymentDate as date,
           p.amount,
-          p.paymentMethod,
-          p.note,
-          p.billId
+          p.paymentMethod
          FROM payments p
          WHERE p.customerId = ? 
-         AND p.paymentDate BETWEEN ? AND ?
+         AND date(p.paymentDate) BETWEEN date(?) AND date(?)
          ORDER BY p.paymentDate ASC, p.id ASC;`,
         [customerId, startDate, endDate],
       );
 
-      // Combine transactions
-      const allTransactions: CustomerStatementItem[] = [];
-
-      // Add ONLY CREDIT BILLS as debit entries
-      for (const bill of bills) {
-        allTransactions.push({
-          id: bill.id,
-          date: bill.date,
-          type: 'Bill',
-          billNo: bill.id,
-          description: `Credit Bill #${bill.id}`,
-          debit: bill.amount,
-          credit: 0,
-          balance: 0,
-          paymentMethod: undefined,
-          note: undefined,
-        });
-      }
-
-      // Add ALL payments as credit entries
-      for (const payment of payments) {
-        allTransactions.push({
-          id: payment.id,
-          date: payment.date,
-          type: 'Payment',
-          billNo: payment.billId,
-          description: `Payment received via ${payment.paymentMethod}${payment.note ? ` - ${payment.note}` : ''}`,
-          debit: 0,
-          credit: payment.amount,
-          balance: 0,
-          paymentMethod: payment.paymentMethod,
-          note: payment.note,
-        });
-      }
-
-      // Sort by date
-      allTransactions.sort(
-        (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
-      );
-
-      // Calculate running balance
+      const transactions: CustomerStatementItem[] = [];
       let runningBalance = openingBalance;
-      let totalDebit = 0;
-      let totalCredit = 0;
+      let totalCreditAmount = 0;
+      let totalReceivedAmount = 0;
 
-      for (const transaction of allTransactions) {
-        if (transaction.type === 'Bill') {
-          runningBalance = runningBalance + transaction.debit;
-          totalDebit += transaction.debit;
-        } else {
-          runningBalance = runningBalance - transaction.credit;
-          totalCredit += transaction.credit;
+      transactions.push({
+        id: 0,
+        date: startDate,
+        billNo: '-',
+        billType: 'Opening',
+        description: 'Opening Balance',
+        billAmount: 0,
+        received: 0,
+        balance: openingBalance,
+      });
+
+      let billIndex = 0;
+      let paymentIndex = 0;
+
+      while (billIndex < bills.length || paymentIndex < payments.length) {
+        let billDate = billIndex < bills.length ? bills[billIndex].date : null;
+        let paymentDate =
+          paymentIndex < payments.length ? payments[paymentIndex].date : null;
+
+        if (billDate && (!paymentDate || billDate <= paymentDate)) {
+          const bill = bills[billIndex];
+
+          if (bill.billType === 'Cash') {
+            transactions.push({
+              id: bill.id,
+              date: bill.date,
+              billNo: bill.id.toString(),
+              billType: 'Cash',
+              description: `Cash Bill`,
+              billAmount: bill.amount,
+              received: bill.amount,
+              balance: runningBalance,
+            });
+            totalReceivedAmount += bill.amount;
+          } else {
+            runningBalance = runningBalance + bill.amount;
+            transactions.push({
+              id: bill.id,
+              date: bill.date,
+              billNo: bill.id.toString(),
+              billType: 'Credit',
+              description: `Credit Bill`,
+              billAmount: bill.amount,
+              received: 0,
+              balance: runningBalance,
+            });
+            totalCreditAmount += bill.amount;
+          }
+          billIndex++;
+        } else if (paymentDate) {
+          const payment = payments[paymentIndex];
+          runningBalance = runningBalance - payment.amount;
+          transactions.push({
+            id: payment.id,
+            date: payment.date,
+            billNo: '-',
+            billType: 'Receipt',
+            description: `Payment (${payment.paymentMethod})`,
+            billAmount: 0,
+            received: payment.amount,
+            balance: runningBalance,
+          });
+          totalReceivedAmount += payment.amount;
+          paymentIndex++;
         }
-        transaction.balance = runningBalance;
       }
 
       const closingBalance = runningBalance;
@@ -1395,9 +1568,9 @@ export function getCustomerStatement(
         customerAddress: customer[0].address,
         openingBalance: openingBalance,
         closingBalance: closingBalance,
-        totalDebit: totalDebit,
-        totalCredit: totalCredit,
-        transactions: allTransactions,
+        totalCreditAmount: totalCreditAmount,
+        totalReceivedAmount: totalReceivedAmount,
+        transactions: transactions,
         startDate: startDate,
         endDate: endDate,
       });
@@ -1407,6 +1580,67 @@ export function getCustomerStatement(
     }
   });
 }
+
+export const getItemSalesSummary = async (
+  startDate: string,
+  endDate: string,
+): Promise<ItemSalesSummary[]> => {
+  try {
+    ensureDBInitialized();
+    const query = `
+      SELECT 
+        bi.itemName as productName,
+        SUM(bi.quantity) as totalQuantity,
+        SUM(bi.total) as totalAmount,
+        AVG(bi.rate) as pricePerUnit
+      FROM bill_items bi
+      INNER JOIN bills b ON bi.billId = b.id
+      WHERE date(b.billingDate) BETWEEN date(?) AND date(?)
+      GROUP BY bi.itemName
+      ORDER BY bi.itemName ASC
+    `;
+    const result = db!.getAllSync<any>(query, [startDate, endDate]);
+    return result.map((row) => ({
+      productName: row.productName,
+      totalQuantity: row.totalQuantity,
+      totalAmount: row.totalAmount,
+      pricePerUnit: row.pricePerUnit || undefined,
+    }));
+  } catch (error) {
+    console.error('Error getting item sales summary:', error);
+    return [];
+  }
+};
+
+export const getBillsByDate = async (
+  date: string,
+): Promise<PartySummaryBill[]> => {
+  try {
+    ensureDBInitialized();
+    const query = `
+      SELECT 
+        b.id,
+        b.id as billNo,
+        b.customerName,
+        b.billType,
+        b.totalAmount
+      FROM bills b
+      WHERE date(b.billingDate) = date(?)
+      ORDER BY b.id DESC
+    `;
+    const result = db!.getAllSync<any>(query, [date]);
+    return result.map((row) => ({
+      id: row.id,
+      billNo: row.billNo.toString(),
+      customerName: row.customerName,
+      billType: row.billType,
+      totalAmount: row.totalAmount,
+    }));
+  } catch (error) {
+    console.error('Error getting bills by date:', error);
+    return [];
+  }
+};
 
 // --- Product Functions ---
 export function getAllProducts(): Promise<Product[]> {
@@ -2139,3 +2373,65 @@ export function deletePurchaseBill(billId: number): Promise<void> {
     }
   });
 }
+
+// --- Settings Functions ---
+export const getAppSettings = async (): Promise<AppSettings> => {
+  ensureDBInitialized();
+  try {
+    const defaultSettings: AppSettings = {
+      shopName: 'My General Store',
+      shopAddress: 'Your Address Here',
+      shopPhone: '+91 9876543210',
+      shopEmail: 'info@mystore.com',
+      topTagline: 'ESTIMATE',
+      bottomTagline:
+        'Thank you for your business! Items once purchased cannot be returned.',
+    };
+
+    const result = db!.getAllSync<any>('SELECT key, value FROM app_settings');
+    if (result.length === 0) {
+      const stmt = db!.prepareSync(
+        'INSERT INTO app_settings (key, value) VALUES (?, ?)',
+      );
+      for (const [key, value] of Object.entries(defaultSettings)) {
+        stmt.executeSync([key, JSON.stringify(value)]);
+      }
+      stmt.finalizeSync();
+      return defaultSettings;
+    }
+
+    const settings: any = {};
+    for (const row of result) {
+      settings[row.key] = JSON.parse(row.value);
+    }
+    return settings as AppSettings;
+  } catch (error) {
+    console.error('Error loading app settings:', error);
+    return {
+      shopName: 'My General Store',
+      shopAddress: 'Your Address Here',
+      shopPhone: '+91 9876543210',
+      shopEmail: 'info@mystore.com',
+      topTagline: 'ESTIMATE',
+      bottomTagline:
+        'Thank you for your business! Items once purchased cannot be returned.',
+    };
+  }
+};
+
+export const saveAppSettings = async (settings: AppSettings): Promise<void> => {
+  ensureDBInitialized();
+  try {
+    const stmt = db!.prepareSync(`
+      INSERT INTO app_settings (key, value) VALUES (?, ?)
+      ON CONFLICT(key) DO UPDATE SET value = excluded.value
+    `);
+    for (const [key, value] of Object.entries(settings)) {
+      stmt.executeSync([key, JSON.stringify(value)]);
+    }
+    stmt.finalizeSync();
+  } catch (error) {
+    console.error('Error saving app settings:', error);
+    throw error;
+  }
+};

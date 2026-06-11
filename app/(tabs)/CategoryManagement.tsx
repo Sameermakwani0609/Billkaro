@@ -1,4 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useNavigation } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -6,6 +8,7 @@ import {
   Animated,
   FlatList,
   Modal,
+  Platform,
   SafeAreaView,
   StatusBar,
   StyleSheet,
@@ -18,24 +21,28 @@ import {
   Category,
   deleteCategory,
   getAllCategories,
+  getAllProducts,
   insertCategory,
   updateCategory,
 } from '../../lib/db';
 
 const CategoryManagement = () => {
+  const navigation = useNavigation();
   const [categories, setCategories] = useState<Category[]>([]);
   const [modalVisible, setModalVisible] = useState(false);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
   const [categoryName, setCategoryName] = useState('');
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [products, setProducts] = useState<any[]>([]);
   const fadeAnim = useState(new Animated.Value(0))[0];
 
   useEffect(() => {
     loadCategories();
+    loadProducts();
     Animated.timing(fadeAnim, {
       toValue: 1,
-      duration: 800,
+      duration: 600,
       useNativeDriver: true,
     }).start();
   }, []);
@@ -51,6 +58,20 @@ const CategoryManagement = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const loadProducts = async () => {
+    try {
+      const allProducts = await getAllProducts();
+      setProducts(allProducts);
+    } catch (error) {
+      console.error('Error loading products:', error);
+    }
+  };
+
+  const getProductCountByCategory = (categoryId: number): number => {
+    return products.filter((product) => product.categoryId === categoryId)
+      .length;
   };
 
   const handleAddCategory = () => {
@@ -124,34 +145,8 @@ const CategoryManagement = () => {
     category.name.toLowerCase().includes(searchQuery.toLowerCase()),
   );
 
-  // Valid Ionicons names
-  const getCategoryIcon = (index: number): keyof typeof Ionicons.glyphMap => {
-    const icons = [
-      'cube',
-      'phone-portrait',
-      'shirt',
-      'restaurant',
-      'bed',
-      'car',
-      'book',
-      'heart',
-      'laptop',
-      'watch',
-    ];
-    return icons[index % icons.length] as keyof typeof Ionicons.glyphMap;
-  };
-
-  const getCategoryColor = (index: number) => {
-    const colors = [
-      '#2196F3',
-      '#4CAF50',
-      '#FF9800',
-      '#9C27B0',
-      '#F44336',
-      '#00BCD4',
-    ];
-    return colors[index % colors.length];
-  };
+  // Single consistent color for all categories
+  const categoryColor = '#3B82F6';
 
   const renderCategoryCard = ({
     item,
@@ -159,118 +154,149 @@ const CategoryManagement = () => {
   }: {
     item: Category;
     index: number;
-  }) => (
-    <Animated.View
-      style={[
-        styles.card,
-        {
-          opacity: fadeAnim,
-          transform: [
-            {
-              translateY: fadeAnim.interpolate({
-                inputRange: [0, 1],
-                outputRange: [50, 0],
-              }),
-            },
-          ],
-        },
-      ]}
-    >
-      <View style={styles.cardContent}>
-        <View
-          style={[
-            styles.iconContainer,
-            { backgroundColor: getCategoryColor(index) + '20' },
-          ]}
-        >
-          <Ionicons
-            name={getCategoryIcon(index)}
-            size={24}
-            color={getCategoryColor(index)}
-          />
+  }) => {
+    const productCount = getProductCountByCategory(item.id);
+
+    return (
+      <Animated.View
+        style={[
+          styles.card,
+          {
+            opacity: fadeAnim,
+            transform: [
+              {
+                translateX: fadeAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [-20, 0],
+                }),
+              },
+            ],
+          },
+        ]}
+      >
+        {/* Left Section - Icon (Same for all categories) */}
+        <View style={styles.cardLeft}>
+          <LinearGradient
+            colors={[categoryColor, categoryColor + 'CC']}
+            style={styles.iconWrapper}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+          >
+            <Ionicons name="pricetag-outline" size={24} color="#FFFFFF" />
+          </LinearGradient>
         </View>
-        <View style={styles.cardInfo}>
+
+        {/* Center Section - Details */}
+        <View style={styles.cardCenter}>
           <Text style={styles.categoryName}>{item.name}</Text>
-          <Text style={styles.productCount}>
-            {Math.floor(Math.random() * 50)} products
-          </Text>
+          <View style={styles.categoryStats}>
+            <View style={styles.statChip}>
+              <Ionicons name="pricetag-outline" size={12} color="#64748B" />
+              <Text style={styles.statChipText}>ID: {item.id}</Text>
+            </View>
+            <View style={styles.statChip}>
+              <Ionicons name="cube-outline" size={12} color="#64748B" />
+              <Text style={styles.statChipText}>
+                {productCount} {productCount === 1 ? 'Product' : 'Products'}
+              </Text>
+            </View>
+          </View>
         </View>
-      </View>
-      <View style={styles.cardActions}>
-        <TouchableOpacity
-          style={[styles.actionButton, styles.editButton]}
-          onPress={() => handleEditCategory(item)}
-        >
-          <Ionicons name="create-outline" size={18} color="#fff" />
-          <Text style={styles.actionButtonText}>Edit</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.actionButton, styles.deleteButton]}
-          onPress={() => handleDeleteCategory(item)}
-        >
-          <Ionicons name="trash-outline" size={18} color="#fff" />
-          <Text style={styles.actionButtonText}>Delete</Text>
-        </TouchableOpacity>
-      </View>
-    </Animated.View>
-  );
+
+        {/* Right Section - Actions */}
+        <View style={styles.cardRight}>
+          <TouchableOpacity
+            style={[styles.actionIcon, styles.editIcon]}
+            onPress={() => handleEditCategory(item)}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="create-outline" size={18} color="#3B82F6" />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.actionIcon, styles.deleteIcon]}
+            onPress={() => handleDeleteCategory(item)}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="trash-outline" size={18} color="#EF4444" />
+          </TouchableOpacity>
+        </View>
+      </Animated.View>
+    );
+  };
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#1565C0" />
+      <StatusBar barStyle="light-content" backgroundColor="#0F172A" />
 
-      {/* Top U-Shape Header */}
-      <View style={styles.headerContainer}>
-        <View style={styles.topCurve}>
-          <View style={styles.headerContent}>
-            <View style={styles.placeholder} />
-            <Text style={styles.headerTitle}>Categories</Text>
-            <View style={styles.placeholder} />
+      {/* Top Header with Dashboard Theme */}
+      <LinearGradient
+        colors={['#0F172A', '#1E3A8A', '#1D4ED8']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.headerContainer}
+      >
+        <View style={styles.headerContent}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => navigation.goBack()}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Categories</Text>
+          <TouchableOpacity
+            style={styles.headerAddButton}
+            onPress={handleAddCategory}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="add" size={24} color="#FFFFFF" />
+          </TouchableOpacity>
+        </View>
+
+        {/* Stats Section */}
+        <View style={styles.statsContainer}>
+          <View style={styles.statItem}>
+            <Text style={styles.statNumber}>{categories.length}</Text>
+            <Text style={styles.statLabel}>Total Categories</Text>
           </View>
-
-          {/* Stats Section */}
-          <View style={styles.statsContainer}>
-            <View style={styles.statCard}>
-              <Text style={styles.statNumber}>{categories.length}</Text>
-              <Text style={styles.statLabel}>Total Categories</Text>
-            </View>
-            <View style={styles.statDivider} />
-            <View style={styles.statCard}>
-              <Text style={styles.statNumber}>
-                {categories.filter((c) => c.name).length}
-              </Text>
-              <Text style={styles.statLabel}>Active</Text>
-            </View>
+          <View style={styles.statDivider} />
+          <View style={styles.statItem}>
+            <Text style={styles.statNumber}>
+              {categories.filter((c) => c.name).length}
+            </Text>
+            <Text style={styles.statLabel}>Active</Text>
+          </View>
+          <View style={styles.statDivider} />
+          <View style={styles.statItem}>
+            <Text style={styles.statNumber}>{filteredCategories.length}</Text>
+            <Text style={styles.statLabel}>Showing</Text>
           </View>
         </View>
-      </View>
+      </LinearGradient>
 
       {/* Search Bar */}
       <View style={styles.searchContainer}>
         <View style={styles.searchBar}>
-          <Ionicons name="search-outline" size={20} color="#999" />
+          <Ionicons name="search-outline" size={20} color="#94A3B8" />
           <TextInput
             style={styles.searchInput}
             placeholder="Search categories..."
-            placeholderTextColor="#999"
+            placeholderTextColor="#94A3B8"
             value={searchQuery}
             onChangeText={setSearchQuery}
           />
           {searchQuery !== '' && (
             <TouchableOpacity onPress={() => setSearchQuery('')}>
-              <Ionicons name="close-circle" size={20} color="#999" />
+              <Ionicons name="close-circle" size={20} color="#94A3B8" />
             </TouchableOpacity>
           )}
         </View>
-        <TouchableOpacity style={styles.addButton} onPress={handleAddCategory}>
-          <Ionicons name="add" size={24} color="#fff" />
-        </TouchableOpacity>
       </View>
 
       {/* Categories List */}
       {loading && !modalVisible ? (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#2196F3" />
+          <ActivityIndicator size="large" color="#3B82F6" />
           <Text style={styles.loadingText}>Loading categories...</Text>
         </View>
       ) : (
@@ -282,11 +308,33 @@ const CategoryManagement = () => {
           showsVerticalScrollIndicator={false}
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
-              <Ionicons name="folder-open-outline" size={80} color="#ddd" />
-              <Text style={styles.emptyText}>No categories found</Text>
-              <Text style={styles.emptySubText}>
-                Tap the + button to create your first category
+              <View style={styles.emptyIconWrapper}>
+                <Ionicons
+                  name="folder-open-outline"
+                  size={64}
+                  color="#CBD5E1"
+                />
+              </View>
+              <Text style={styles.emptyTitle}>No categories found</Text>
+              <Text style={styles.emptyDescription}>
+                {searchQuery
+                  ? 'Try adjusting your search terms'
+                  : 'Get started by creating your first category'}
               </Text>
+              <TouchableOpacity
+                style={styles.emptyButton}
+                onPress={handleAddCategory}
+              >
+                <LinearGradient
+                  colors={['#3B82F6', '#1D4ED8']}
+                  style={styles.emptyButtonGradient}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                >
+                  <Ionicons name="add" size={18} color="#FFFFFF" />
+                  <Text style={styles.emptyButtonText}>Create Category</Text>
+                </LinearGradient>
+              </TouchableOpacity>
             </View>
           }
         />
@@ -301,33 +349,31 @@ const CategoryManagement = () => {
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <View style={styles.modalHeaderIcon}>
-                <Ionicons name="pricetag-outline" size={30} color="#2196F3" />
-              </View>
+            <LinearGradient
+              colors={['#0F172A', '#1E3A8A']}
+              style={styles.modalHeader}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+            >
               <Text style={styles.modalTitle}>
-                {editingCategory ? 'Edit Category' : 'Create New Category'}
+                {editingCategory ? 'Edit Category' : 'New Category'}
               </Text>
               <TouchableOpacity
-                style={styles.closeButton}
+                style={styles.modalClose}
                 onPress={() => setModalVisible(false)}
+                activeOpacity={0.7}
               >
-                <Ionicons name="close" size={24} color="#666" />
+                <Ionicons name="close" size={24} color="#FFFFFF" />
               </TouchableOpacity>
-            </View>
+            </LinearGradient>
 
             <View style={styles.modalBody}>
-              <View style={styles.inputContainer}>
-                <Ionicons
-                  name="bookmark-outline"
-                  size={20}
-                  color="#2196F3"
-                  style={styles.inputIcon}
-                />
+              <View style={styles.inputWrapper}>
+                <Ionicons name="bookmark-outline" size={20} color="#3B82F6" />
                 <TextInput
-                  style={styles.input}
-                  placeholder="Category Name"
-                  placeholderTextColor="#999"
+                  style={styles.modalInput}
+                  placeholder="Category name"
+                  placeholderTextColor="#94A3B8"
                   value={categoryName}
                   onChangeText={setCategoryName}
                   autoFocus
@@ -337,19 +383,27 @@ const CategoryManagement = () => {
 
             <View style={styles.modalFooter}>
               <TouchableOpacity
-                style={[styles.modalButton, styles.cancelButton]}
+                style={styles.modalCancelBtn}
                 onPress={() => setModalVisible(false)}
+                activeOpacity={0.7}
               >
-                <Text style={styles.cancelButtonText}>Cancel</Text>
+                <Text style={styles.modalCancelText}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.modalButton, styles.saveButton]}
+                style={styles.modalSaveBtn}
                 onPress={handleSaveCategory}
+                activeOpacity={0.7}
               >
-                <Ionicons name="checkmark" size={20} color="#fff" />
-                <Text style={styles.saveButtonText}>
-                  {editingCategory ? 'Update' : 'Create'}
-                </Text>
+                <LinearGradient
+                  colors={['#3B82F6', '#1D4ED8']}
+                  style={styles.modalSaveGradient}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                >
+                  <Text style={styles.modalSaveText}>
+                    {editingCategory ? 'Update' : 'Create'}
+                  </Text>
+                </LinearGradient>
               </TouchableOpacity>
             </View>
           </View>
@@ -362,172 +416,178 @@ const CategoryManagement = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F7FA',
+    backgroundColor: '#F8FAFC',
   },
   headerContainer: {
-    backgroundColor: '#2196F3',
-    borderBottomLeftRadius: 30,
-    borderBottomRightRadius: 30,
-    overflow: 'hidden',
-  },
-  topCurve: {
-    backgroundColor: '#2196F3',
+    paddingTop: Platform.OS === 'ios' ? 58 : 44,
     paddingBottom: 20,
+    borderBottomLeftRadius: 32,
+    borderBottomRightRadius: 32,
+    elevation: 12,
+    shadowColor: '#1E3A8A',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.35,
+    shadowRadius: 20,
   },
   headerContent: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 10,
+    marginBottom: 20,
   },
-  placeholder: {
+  backButton: {
     width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   headerTitle: {
     fontSize: 24,
-    fontWeight: 'bold',
-    color: '#fff',
-    textAlign: 'center',
+    fontWeight: '700',
+    color: '#FFFFFF',
+    letterSpacing: 0.5,
+  },
+  headerAddButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   statsContainer: {
     flexDirection: 'row',
     justifyContent: 'space-around',
     alignItems: 'center',
-    marginTop: 10,
     marginHorizontal: 20,
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    borderRadius: 15,
-    padding: 15,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    borderRadius: 20,
+    paddingVertical: 14,
   },
-  statCard: {
+  statItem: {
     alignItems: 'center',
     flex: 1,
   },
   statNumber: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#fff',
-    marginBottom: 5,
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    marginBottom: 4,
   },
   statLabel: {
-    fontSize: 12,
-    color: '#fff',
-    opacity: 0.9,
+    fontSize: 11,
+    color: '#93C5FD',
+    fontWeight: '500',
+    letterSpacing: 0.3,
   },
   statDivider: {
     width: 1,
     height: 30,
-    backgroundColor: 'rgba(255,255,255,0.3)',
+    backgroundColor: 'rgba(255,255,255,0.2)',
   },
   searchContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
     paddingHorizontal: 20,
     marginTop: -20,
-    marginBottom: 10,
+    marginBottom: 16,
   },
   searchBar: {
-    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    paddingHorizontal: 15,
-    paddingVertical: 12,
-    marginRight: 12,
-    shadowColor: '#000',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    shadowColor: '#94A3B8',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.05,
     shadowRadius: 4,
-    elevation: 3,
+    elevation: 2,
   },
   searchInput: {
     flex: 1,
-    marginLeft: 10,
-    fontSize: 16,
-    color: '#333',
-  },
-  addButton: {
-    backgroundColor: '#2196F3',
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#2196F3',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 5,
+    marginLeft: 12,
+    fontSize: 15,
+    color: '#0F172A',
   },
   listContainer: {
-    padding: 20,
+    paddingHorizontal: 20,
+    paddingBottom: 30,
   },
   card: {
-    backgroundColor: '#fff',
-    borderRadius: 15,
-    marginBottom: 15,
-    padding: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  cardContent: {
     flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
     marginBottom: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
+    shadowColor: '#94A3B8',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
   },
-  iconContainer: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
+  cardLeft: {
+    marginRight: 16,
+  },
+  iconWrapper: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 15,
   },
-  cardInfo: {
+  cardCenter: {
     flex: 1,
   },
   categoryName: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 4,
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#0F172A',
+    marginBottom: 8,
   },
-  productCount: {
-    fontSize: 13,
-    color: '#999',
-  },
-  cardActions: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    borderTopWidth: 1,
-    borderTopColor: '#f0f0f0',
-    paddingTop: 12,
-  },
-  actionButton: {
+  categoryStats: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
-    marginLeft: 10,
+    flexWrap: 'wrap',
+    gap: 10,
   },
-  editButton: {
-    backgroundColor: '#2196F3',
+  statChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#F8FAFC',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
   },
-  deleteButton: {
-    backgroundColor: '#FF5252',
+  statChipText: {
+    fontSize: 11,
+    color: '#64748B',
+    fontWeight: '500',
   },
-  actionButtonText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '600',
-    marginLeft: 6,
+  cardRight: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  actionIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  editIcon: {
+    backgroundColor: '#EFF6FF',
+  },
+  deleteIcon: {
+    backgroundColor: '#FEF2F2',
   },
   loadingContainer: {
     flex: 1,
@@ -535,27 +595,53 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   loadingText: {
-    marginTop: 10,
-    fontSize: 16,
-    color: '#666',
+    marginTop: 12,
+    fontSize: 14,
+    color: '#64748B',
+    fontWeight: '500',
   },
   emptyContainer: {
-    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 80,
+  },
+  emptyIconWrapper: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: '#F1F5F9',
     justifyContent: 'center',
     alignItems: 'center',
-    paddingTop: 60,
+    marginBottom: 20,
   },
-  emptyText: {
+  emptyTitle: {
     fontSize: 18,
-    fontWeight: 'bold',
-    color: '#999',
-    marginTop: 16,
+    fontWeight: '600',
+    color: '#64748B',
     marginBottom: 8,
   },
-  emptySubText: {
+  emptyDescription: {
     fontSize: 14,
-    color: '#bbb',
+    color: '#94A3B8',
     textAlign: 'center',
+    marginBottom: 24,
+    maxWidth: '80%',
+  },
+  emptyButton: {
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  emptyButtonGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    gap: 8,
+  },
+  emptyButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
   },
   modalOverlay: {
     flex: 1,
@@ -564,90 +650,85 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   modalContent: {
-    backgroundColor: '#fff',
-    borderRadius: 20,
-    width: '90%',
-    maxWidth: 400,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    width: '85%',
     overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
   },
   modalHeader: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     padding: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
-    position: 'relative',
-  },
-  modalHeaderIcon: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: '#E3F2FD',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 15,
   },
   modalTitle: {
-    flex: 1,
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#333',
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#FFFFFF',
   },
-  closeButton: {
-    padding: 8,
+  modalClose: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   modalBody: {
     padding: 20,
   },
-  inputContainer: {
+  inputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 12,
-    paddingHorizontal: 15,
-    backgroundColor: '#fff',
-  },
-  inputIcon: {
-    marginRight: 10,
-  },
-  input: {
-    flex: 1,
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    borderRadius: 14,
+    paddingHorizontal: 16,
     paddingVertical: 12,
-    fontSize: 16,
-    color: '#333',
+    backgroundColor: '#FFFFFF',
+    gap: 12,
+  },
+  modalInput: {
+    flex: 1,
+    fontSize: 15,
+    color: '#0F172A',
   },
   modalFooter: {
     flexDirection: 'row',
     padding: 20,
-    borderTopWidth: 1,
-    borderTopColor: '#f0f0f0',
+    paddingTop: 0,
+    gap: 12,
   },
-  modalButton: {
+  modalCancelBtn: {
     flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: '#F1F5F9',
     paddingVertical: 12,
-    borderRadius: 10,
-    marginHorizontal: 5,
+    borderRadius: 12,
+    alignItems: 'center',
   },
-  cancelButton: {
-    backgroundColor: '#f5f5f5',
-  },
-  saveButton: {
-    backgroundColor: '#2196F3',
-  },
-  cancelButtonText: {
-    color: '#666',
-    fontSize: 16,
+  modalCancelText: {
+    color: '#64748B',
+    fontSize: 15,
     fontWeight: '600',
   },
-  saveButtonText: {
-    color: '#fff',
-    fontSize: 16,
+  modalSaveBtn: {
+    flex: 1,
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  modalSaveGradient: {
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  modalSaveText: {
+    color: '#FFFFFF',
+    fontSize: 15,
     fontWeight: '600',
-    marginLeft: 8,
   },
 });
 

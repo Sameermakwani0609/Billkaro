@@ -19,6 +19,7 @@ import {
   Alert,
   FlatList,
   Modal,
+  Platform,
   RefreshControl,
   ScrollView,
   StatusBar,
@@ -799,8 +800,11 @@ export default function ViewBillsScreen() {
   if (loading) {
     return (
       <View style={styles.container}>
-        <StatusBar backgroundColor="#2563EB" barStyle="light-content" />
-        <LinearGradient colors={['#2563EB', '#1D4ED8']} style={styles.header}>
+        <StatusBar backgroundColor="#0F172A" barStyle="light-content" />
+        <LinearGradient
+          colors={['#0F172A', '#1E3A8A', '#1D4ED8']}
+          style={styles.header}
+        >
           <View style={styles.headerContent}>
             <TouchableOpacity
               style={styles.backButton}
@@ -821,10 +825,15 @@ export default function ViewBillsScreen() {
 
   return (
     <View style={styles.container}>
-      <StatusBar backgroundColor="#2563EB" barStyle="light-content" />
+      <StatusBar backgroundColor="#0F172A" barStyle="light-content" />
 
-      {/* Header */}
-      <LinearGradient colors={['#2563EB', '#1D4ED8']} style={styles.header}>
+      {/* Header with Dashboard Theme */}
+      <LinearGradient
+        colors={['#0F172A', '#1E3A8A', '#1D4ED8']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.header}
+      >
         <View style={styles.headerContent}>
           <TouchableOpacity
             style={styles.backButton}
@@ -834,6 +843,26 @@ export default function ViewBillsScreen() {
           </TouchableOpacity>
           <Text style={styles.headerTitle}>View Bills</Text>
           <View style={styles.headerRight} />
+        </View>
+        <View style={styles.headerStats}>
+          <View style={styles.statItem}>
+            <Text style={styles.statValue}>{bills.length}</Text>
+            <Text style={styles.statLabel}>Total Bills</Text>
+          </View>
+          <View style={styles.statDivider} />
+          <View style={styles.statItem}>
+            <Text style={styles.statValue}>
+              {bills.filter((b: Bill) => b.billType === 'Cash').length}
+            </Text>
+            <Text style={styles.statLabel}>Cash</Text>
+          </View>
+          <View style={styles.statDivider} />
+          <View style={styles.statItem}>
+            <Text style={styles.statValue}>
+              {bills.filter((b: Bill) => b.billType === 'Credit').length}
+            </Text>
+            <Text style={styles.statLabel}>Credit</Text>
+          </View>
         </View>
       </LinearGradient>
 
@@ -845,7 +874,7 @@ export default function ViewBillsScreen() {
             style={styles.dateButton}
             onPress={() => setShowDatePicker(true)}
           >
-            <Calendar size={16} color="#6B7280" />
+            <Calendar size={16} color="#3B82F6" />
             <Text style={styles.dateButtonText}>
               {selectedDate
                 ? formatDateForDisplay(selectedDate)
@@ -904,7 +933,7 @@ export default function ViewBillsScreen() {
           >
             <IndianRupee
               size={14}
-              color={filterType === 'Cash' ? '#FFF' : '#059669'}
+              color={filterType === 'Cash' ? '#FFF' : '#10B981'}
             />
             <Text
               style={[
@@ -942,17 +971,17 @@ export default function ViewBillsScreen() {
 
       {/* Search Bar */}
       <View style={styles.searchContainer}>
-        <Search size={20} color="#6B7280" />
+        <Search size={20} color="#64748B" />
         <TextInput
           style={styles.searchInput}
           placeholder="Search by customer name, bill ID..."
-          placeholderTextColor="#9CA3AF"
+          placeholderTextColor="#94A3B8"
           value={searchQuery}
           onChangeText={setSearchQuery}
         />
         {searchQuery !== '' && (
           <TouchableOpacity onPress={() => setSearchQuery('')}>
-            <X size={20} color="#6B7280" />
+            <X size={20} color="#64748B" />
           </TouchableOpacity>
         )}
       </View>
@@ -971,7 +1000,11 @@ export default function ViewBillsScreen() {
       <ScrollView
         style={styles.content}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={['#3B82F6']}
+          />
         }
         showsVerticalScrollIndicator={false}
       >
@@ -1001,13 +1034,13 @@ export default function ViewBillsScreen() {
                   <Text style={styles.customerName}>{bill.customerName}</Text>
                   <View style={styles.billMeta}>
                     <View style={styles.metaItem}>
-                      <Calendar size={12} color="#6B7280" />
+                      <Calendar size={12} color="#64748B" />
                       <Text style={styles.metaText}>
                         {formatDate(bill.billingDate)}
                       </Text>
                     </View>
                     <View style={styles.metaItem}>
-                      <CreditCard size={12} color="#6B7280" />
+                      <CreditCard size={12} color="#64748B" />
                       <Text
                         style={[
                           styles.metaText,
@@ -1020,7 +1053,7 @@ export default function ViewBillsScreen() {
                       </Text>
                     </View>
                     <View style={styles.metaItem}>
-                      <IndianRupee size={12} color="#6B7280" />
+                      <IndianRupee size={12} color="#64748B" />
                       <Text style={styles.metaText}>
                         {formatCurrency(bill.totalAmount)}
                       </Text>
@@ -1032,7 +1065,7 @@ export default function ViewBillsScreen() {
                     style={styles.editButton}
                     onPress={() => handleEditBill(bill)}
                   >
-                    <Edit3 size={18} color="#2563EB" />
+                    <Edit3 size={18} color="#3B82F6" />
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={styles.deleteButton}
@@ -1105,7 +1138,9 @@ export default function ViewBillsScreen() {
       >
         <View style={styles.modalContainer}>
           <LinearGradient
-            colors={['#2563EB', '#1D4ED8']}
+            colors={['#0F172A', '#1E3A8A', '#1D4ED8']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
             style={styles.modalHeader}
           >
             <View style={styles.modalHeaderContent}>
@@ -1126,12 +1161,13 @@ export default function ViewBillsScreen() {
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Customer Information</Text>
               <View style={styles.inputContainer}>
-                <User size={20} color="#6B7280" style={styles.inputIcon} />
+                <User size={20} color="#64748B" style={styles.inputIcon} />
                 <TextInput
                   style={styles.input}
                   value={customerName}
                   onChangeText={setCustomerName}
                   placeholder="Customer Name"
+                  placeholderTextColor="#94A3B8"
                 />
               </View>
 
@@ -1142,6 +1178,7 @@ export default function ViewBillsScreen() {
                     value={billingDate}
                     onChangeText={setBillingDate}
                     placeholder="Billing Date (YYYY-MM-DD)"
+                    placeholderTextColor="#94A3B8"
                   />
                 </View>
 
@@ -1176,6 +1213,7 @@ export default function ViewBillsScreen() {
                   onChangeText={setBillDiscount}
                   keyboardType="decimal-pad"
                   placeholder="Bill discount %"
+                  placeholderTextColor="#94A3B8"
                 />
                 <Text style={styles.percentSymbol}>%</Text>
               </View>
@@ -1239,6 +1277,7 @@ export default function ViewBillsScreen() {
                           }
                           keyboardType="decimal-pad"
                           placeholder={item.sellPrice.toFixed(2)}
+                          placeholderTextColor="#94A3B8"
                         />
                       </View>
 
@@ -1256,6 +1295,7 @@ export default function ViewBillsScreen() {
                           }
                           keyboardType="decimal-pad"
                           placeholder="0"
+                          placeholderTextColor="#94A3B8"
                         />
                       </View>
 
@@ -1280,6 +1320,7 @@ export default function ViewBillsScreen() {
                               }
                             }}
                             keyboardType="numeric"
+                            placeholderTextColor="#94A3B8"
                           />
                           <TouchableOpacity
                             style={styles.quantityButton}
@@ -1423,9 +1464,16 @@ export default function ViewBillsScreen() {
               onPress={handleUpdateBill}
               disabled={editLoading}
             >
-              <Text style={styles.updateButtonText}>
-                {editLoading ? 'Updating...' : 'Update Bill'}
-              </Text>
+              <LinearGradient
+                colors={['#3B82F6', '#1D4ED8']}
+                style={styles.updateButtonGradient}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+              >
+                <Text style={styles.updateButtonText}>
+                  {editLoading ? 'Updating...' : 'Update Bill'}
+                </Text>
+              </LinearGradient>
             </TouchableOpacity>
           </ScrollView>
         </View>
@@ -1440,7 +1488,9 @@ export default function ViewBillsScreen() {
       >
         <View style={styles.modalContainer}>
           <LinearGradient
-            colors={['#10B981', '#059669']}
+            colors={['#0F172A', '#1E3A8A', '#1D4ED8']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
             style={styles.modalHeader}
           >
             <View style={styles.modalHeaderContent}>
@@ -1457,11 +1507,11 @@ export default function ViewBillsScreen() {
           <View style={styles.addItemModalContent}>
             {/* Search Bar */}
             <View style={styles.searchContainer}>
-              <Search size={20} color="#6B7280" />
+              <Search size={20} color="#64748B" />
               <TextInput
                 style={styles.searchInput}
                 placeholder="Search products by name or category..."
-                placeholderTextColor="#9CA3AF"
+                placeholderTextColor="#94A3B8"
                 value={productSearchQuery}
                 onChangeText={setProductSearchQuery}
               />
@@ -1518,38 +1568,82 @@ export default function ViewBillsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: '#F1F5F9',
   },
   header: {
-    paddingTop: 50,
-    paddingBottom: 16,
+    paddingTop: Platform.OS === 'ios' ? 58 : 44,
+    paddingBottom: 20,
+    borderBottomLeftRadius: 32,
+    borderBottomRightRadius: 32,
+    elevation: 12,
+    shadowColor: '#1E3A8A',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.35,
+    shadowRadius: 20,
   },
   headerContent: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
+    paddingHorizontal: 20,
+    marginBottom: 16,
   },
   backButton: {
     padding: 4,
   },
   headerTitle: {
-    fontSize: 20,
-    fontWeight: '700',
+    fontSize: 24,
+    fontWeight: '900',
     color: '#FFF',
+    letterSpacing: 1,
   },
   headerRight: {
     width: 32,
+  },
+  headerStats: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-around',
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    marginHorizontal: 20,
+  },
+  statItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  statValue: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    marginBottom: 4,
+  },
+  statLabel: {
+    fontSize: 11,
+    color: '#93C5FD',
+    fontWeight: '500',
+  },
+  statDivider: {
+    width: 1,
+    height: 30,
+    backgroundColor: 'rgba(255,255,255,0.2)',
   },
   dateFilterSection: {
     backgroundColor: '#FFF',
     marginHorizontal: 16,
     marginTop: 16,
     marginBottom: 8,
-    padding: 12,
-    borderRadius: 8,
+    padding: 14,
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: '#F1F5F9',
+    shadowColor: '#94A3B8',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
   },
   dateContainer: {
     flexDirection: 'row',
@@ -1560,49 +1654,56 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F9FAFB',
+    backgroundColor: '#F8FAFC',
     paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 6,
+    paddingVertical: 10,
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#D1D5DB',
-    gap: 6,
+    borderColor: '#E2E8F0',
+    gap: 8,
   },
   dateButtonText: {
     fontSize: 14,
-    color: '#374151',
+    color: '#0F172A',
+    fontWeight: '500',
   },
   clearDateButton: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#FEF2F2',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: '#FEE2E2',
-    gap: 4,
+    gap: 6,
   },
   clearDateText: {
-    fontSize: 14,
+    fontSize: 13,
     color: '#EF4444',
-    fontWeight: '500',
+    fontWeight: '600',
   },
   filterSection: {
     backgroundColor: '#FFF',
     marginHorizontal: 16,
     marginTop: 8,
     marginBottom: 8,
-    padding: 12,
-    borderRadius: 8,
+    padding: 14,
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: '#F1F5F9',
+    shadowColor: '#94A3B8',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
   },
   filterLabel: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '600',
-    color: '#374151',
-    marginBottom: 8,
+    color: '#475569',
+    marginBottom: 10,
+    letterSpacing: 0.3,
   },
   filterButtons: {
     flexDirection: 'row',
@@ -1612,29 +1713,31 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 6,
-    gap: 4,
-    backgroundColor: '#F3F4F6',
+    paddingVertical: 8,
+    borderRadius: 10,
+    gap: 6,
+    backgroundColor: '#F1F5F9',
     borderWidth: 1,
-    borderColor: '#D1D5DB',
+    borderColor: '#E2E8F0',
+    flex: 1,
+    justifyContent: 'center',
   },
   filterButtonActive: {
-    backgroundColor: '#2563EB',
-    borderColor: '#2563EB',
+    backgroundColor: '#3B82F6',
+    borderColor: '#3B82F6',
   },
   filterButtonCashActive: {
-    backgroundColor: '#059669',
-    borderColor: '#059669',
+    backgroundColor: '#10B981',
+    borderColor: '#10B981',
   },
   filterButtonCreditActive: {
     backgroundColor: '#F59E0B',
     borderColor: '#F59E0B',
   },
   filterButtonText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#4B5563',
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#475569',
   },
   filterButtonTextActive: {
     color: '#FFF',
@@ -1646,17 +1749,17 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
     marginTop: 8,
     marginBottom: 4,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 14,
     borderWidth: 1,
-    borderColor: '#D1D5DB',
+    borderColor: '#E2E8F0',
   },
   searchInput: {
     flex: 1,
-    marginLeft: 8,
-    fontSize: 16,
-    color: '#111827',
+    marginLeft: 10,
+    fontSize: 15,
+    color: '#0F172A',
   },
   resultsCount: {
     paddingHorizontal: 16,
@@ -1664,8 +1767,9 @@ const styles = StyleSheet.create({
   },
   resultsCountText: {
     fontSize: 12,
-    color: '#6B7280',
+    color: '#64748B',
     fontStyle: 'italic',
+    fontWeight: '500',
   },
   content: {
     flex: 1,
@@ -1678,7 +1782,7 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     fontSize: 16,
-    color: '#6B7280',
+    color: '#64748B',
   },
   emptyState: {
     alignItems: 'center',
@@ -1687,26 +1791,26 @@ const styles = StyleSheet.create({
   },
   emptyStateText: {
     fontSize: 18,
-    fontWeight: '600',
-    color: '#6B7280',
+    fontWeight: '700',
+    color: '#64748B',
     marginBottom: 8,
   },
   emptyStateSubtext: {
     fontSize: 14,
-    color: '#9CA3AF',
+    color: '#94A3B8',
     textAlign: 'center',
   },
   billCard: {
     backgroundColor: '#FFF',
-    borderRadius: 12,
+    borderRadius: 16,
     padding: 16,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
+    borderColor: '#F1F5F9',
+    shadowColor: '#94A3B8',
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
-    shadowRadius: 3,
+    shadowRadius: 4,
     elevation: 2,
   },
   billHeader: {
@@ -1720,14 +1824,15 @@ const styles = StyleSheet.create({
   },
   billId: {
     fontSize: 16,
-    fontWeight: '700',
-    color: '#111827',
+    fontWeight: '800',
+    color: '#0F172A',
     marginBottom: 4,
+    letterSpacing: 0.3,
   },
   customerName: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#374151',
+    color: '#334155',
     marginBottom: 8,
   },
   billMeta: {
@@ -1742,15 +1847,16 @@ const styles = StyleSheet.create({
   },
   metaText: {
     fontSize: 12,
-    color: '#6B7280',
+    color: '#64748B',
+    fontWeight: '500',
   },
   cashText: {
-    color: '#059669',
-    fontWeight: '600',
+    color: '#10B981',
+    fontWeight: '700',
   },
   creditText: {
     color: '#F59E0B',
-    fontWeight: '600',
+    fontWeight: '700',
   },
   billActions: {
     flexDirection: 'row',
@@ -1759,62 +1865,63 @@ const styles = StyleSheet.create({
   editButton: {
     padding: 8,
     backgroundColor: '#EFF6FF',
-    borderRadius: 6,
+    borderRadius: 10,
   },
   deleteButton: {
     padding: 8,
     backgroundColor: '#FEF2F2',
-    borderRadius: 6,
+    borderRadius: 10,
   },
   itemsSummary: {
     borderTopWidth: 1,
-    borderTopColor: '#F3F4F6',
+    borderTopColor: '#F1F5F9',
     paddingTop: 12,
   },
   itemsTitle: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '600',
-    color: '#374151',
+    color: '#475569',
     marginBottom: 8,
   },
   itemRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 4,
+    marginBottom: 6,
   },
   itemName: {
     flex: 1,
     fontSize: 12,
-    color: '#6B7280',
+    color: '#64748B',
+    fontWeight: '500',
   },
   itemDetails: {
     fontSize: 12,
-    color: '#6B7280',
+    color: '#64748B',
     marginHorizontal: 8,
   },
   itemTotal: {
     fontSize: 12,
-    fontWeight: '600',
-    color: '#111827',
+    fontWeight: '700',
+    color: '#0F172A',
     minWidth: 60,
     textAlign: 'right',
   },
   discountSummary: {
     borderTopWidth: 1,
-    borderTopColor: '#F3F4F6',
+    borderTopColor: '#F1F5F9',
     paddingTop: 8,
     marginTop: 8,
   },
   discountText: {
     fontSize: 12,
-    color: '#059669',
-    fontWeight: '500',
+    color: '#10B981',
+    fontWeight: '600',
     marginBottom: 2,
   },
   profitSummary: {
     borderTopWidth: 1,
-    borderTopColor: '#F3F4F6',
+    borderTopColor: '#F1F5F9',
     paddingTop: 8,
     marginTop: 8,
   },
@@ -1825,42 +1932,45 @@ const styles = StyleSheet.create({
   },
   modalContainer: {
     flex: 1,
-    backgroundColor: '#FFF',
+    backgroundColor: '#F1F5F9',
   },
   modalHeader: {
-    paddingTop: 50,
+    paddingTop: Platform.OS === 'ios' ? 58 : 44,
     paddingBottom: 16,
   },
   modalHeaderContent: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
+    paddingHorizontal: 20,
   },
   modalTitle: {
     fontSize: 20,
-    fontWeight: '700',
+    fontWeight: '800',
     color: '#FFF',
+    letterSpacing: 0.3,
   },
   closeButton: {
     padding: 4,
   },
   modalContent: {
     flex: 1,
-    padding: 16,
+    padding: 20,
   },
   addItemModalContent: {
     flex: 1,
     padding: 16,
+    backgroundColor: '#F1F5F9',
   },
   section: {
     marginBottom: 24,
   },
   sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#111827',
+    fontSize: 17,
+    fontWeight: '800',
+    color: '#0F172A',
     marginBottom: 12,
+    letterSpacing: 0.3,
   },
   cartHeader: {
     flexDirection: 'row',
@@ -1871,35 +1981,35 @@ const styles = StyleSheet.create({
   addItemButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#10B981',
-    paddingHorizontal: 16,
+    backgroundColor: '#3B82F6',
+    paddingHorizontal: 14,
     paddingVertical: 8,
-    borderRadius: 8,
+    borderRadius: 10,
     gap: 6,
   },
   addItemButtonText: {
     color: '#FFF',
     fontWeight: '600',
-    fontSize: 14,
+    fontSize: 13,
   },
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F9FAFB',
-    borderRadius: 8,
-    paddingHorizontal: 12,
+    backgroundColor: '#FFF',
+    borderRadius: 12,
+    paddingHorizontal: 14,
     borderWidth: 1,
-    borderColor: '#D1D5DB',
+    borderColor: '#E2E8F0',
     marginBottom: 12,
   },
   inputIcon: {
-    marginRight: 8,
+    marginRight: 10,
   },
   input: {
     flex: 1,
     height: 48,
-    fontSize: 16,
-    color: '#111827',
+    fontSize: 15,
+    color: '#0F172A',
   },
   row: {
     flexDirection: 'row',
@@ -1908,10 +2018,10 @@ const styles = StyleSheet.create({
   billTypeButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
+    paddingHorizontal: 18,
     paddingVertical: 12,
-    borderRadius: 8,
-    gap: 6,
+    borderRadius: 12,
+    gap: 8,
   },
   cashActive: {
     backgroundColor: '#10B981',
@@ -1927,94 +2037,100 @@ const styles = StyleSheet.create({
   billDiscountInputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F9FAFB',
-    borderRadius: 8,
-    paddingHorizontal: 12,
+    backgroundColor: '#FFF',
+    borderRadius: 12,
+    paddingHorizontal: 14,
     borderWidth: 1,
-    borderColor: '#D1D5DB',
+    borderColor: '#E2E8F0',
   },
   billDiscountInput: {
     flex: 1,
     height: 48,
-    fontSize: 16,
-    color: '#111827',
+    fontSize: 15,
+    color: '#0F172A',
   },
   percentSymbol: {
     fontSize: 16,
-    color: '#6B7280',
-    fontWeight: '500',
-    marginLeft: 4,
+    color: '#64748B',
+    fontWeight: '600',
+    marginLeft: 8,
   },
   editCartItem: {
-    backgroundColor: '#F8FAFC',
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 8,
+    backgroundColor: '#FFF',
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 10,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: '#F1F5F9',
+    shadowColor: '#94A3B8',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
   },
   itemHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: 8,
+    marginBottom: 10,
   },
   itemInfo: {
     flex: 1,
   },
   itemStock: {
-    fontSize: 12,
-    color: '#6B7280',
+    fontSize: 11,
+    color: '#64748B',
     marginTop: 2,
   },
   removeItemBtn: {
     backgroundColor: '#EF4444',
-    width: 24,
-    height: 24,
-    borderRadius: 4,
+    width: 26,
+    height: 26,
+    borderRadius: 6,
     justifyContent: 'center',
     alignItems: 'center',
   },
   priceRow: {
     flexDirection: 'row',
     gap: 8,
-    marginBottom: 8,
+    marginBottom: 10,
   },
   priceInputContainer: {
     flex: 1,
   },
   priceLabel: {
-    fontSize: 12,
-    color: '#6B7280',
+    fontSize: 11,
+    color: '#64748B',
     marginBottom: 4,
+    fontWeight: '500',
   },
   rateInput: {
     borderWidth: 1,
-    borderColor: '#D1D5DB',
-    borderRadius: 4,
+    borderColor: '#E2E8F0',
+    borderRadius: 8,
     paddingHorizontal: 8,
     paddingVertical: 6,
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '500',
-    color: '#111827',
+    color: '#0F172A',
     textAlign: 'center',
     backgroundColor: '#FFF',
   },
   rateInputModified: {
-    borderColor: '#2563EB',
+    borderColor: '#3B82F6',
     backgroundColor: '#EFF6FF',
     fontWeight: '700',
     color: '#1E40AF',
   },
   discountInput: {
     borderWidth: 1,
-    borderColor: '#D1D5DB',
-    borderRadius: 4,
+    borderColor: '#E2E8F0',
+    borderRadius: 8,
     paddingHorizontal: 8,
     paddingVertical: 6,
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '500',
-    color: '#111827',
+    color: '#0F172A',
     textAlign: 'center',
     backgroundColor: '#FFF',
   },
@@ -2035,21 +2151,21 @@ const styles = StyleSheet.create({
   quantityButton: {
     width: 28,
     height: 28,
-    backgroundColor: '#2563EB',
-    borderRadius: 4,
+    backgroundColor: '#3B82F6',
+    borderRadius: 6,
     justifyContent: 'center',
     alignItems: 'center',
   },
   quantityInput: {
     flex: 1,
     borderWidth: 1,
-    borderColor: '#D1D5DB',
-    borderRadius: 4,
+    borderColor: '#E2E8F0',
+    borderRadius: 8,
     paddingHorizontal: 8,
     paddingVertical: 4,
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '500',
-    color: '#111827',
+    color: '#0F172A',
     textAlign: 'center',
     backgroundColor: '#FFF',
   },
@@ -2060,36 +2176,36 @@ const styles = StyleSheet.create({
     marginTop: 8,
     paddingTop: 8,
     borderTopWidth: 1,
-    borderTopColor: '#E2E8F0',
+    borderTopColor: '#F1F5F9',
   },
   itemTotalLabel: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '600',
-    color: '#374151',
+    color: '#475569',
   },
   itemProfitLabel: {
-    fontSize: 12,
-    color: '#059669',
-    fontWeight: '500',
+    fontSize: 11,
+    color: '#10B981',
+    fontWeight: '600',
     marginTop: 2,
   },
   itemTotalAmount: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#111827',
+    color: '#0F172A',
   },
   discountInfo: {
     marginTop: 4,
   },
   discountInfoText: {
-    fontSize: 12,
-    color: '#059669',
+    fontSize: 11,
+    color: '#10B981',
     fontStyle: 'italic',
   },
   priceSummary: {
     backgroundColor: '#F8FAFC',
     padding: 16,
-    borderRadius: 8,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: '#E2E8F0',
   },
@@ -2100,12 +2216,12 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   summaryLabel: {
-    fontSize: 14,
+    fontSize: 13,
     color: '#64748B',
     fontWeight: '500',
   },
   summaryValue: {
-    fontSize: 14,
+    fontSize: 13,
     color: '#334155',
     fontWeight: '600',
   },
@@ -2122,14 +2238,14 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   finalTotalLabel: {
-    fontSize: 16,
-    color: '#111827',
-    fontWeight: '700',
+    fontSize: 15,
+    color: '#0F172A',
+    fontWeight: '800',
   },
   finalTotalValue: {
-    fontSize: 18,
-    color: '#111827',
-    fontWeight: '700',
+    fontSize: 17,
+    color: '#0F172A',
+    fontWeight: '800',
   },
   profitSection: {
     marginTop: 12,
@@ -2138,7 +2254,7 @@ const styles = StyleSheet.create({
     borderTopColor: '#10B981',
   },
   profitSectionTitle: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '700',
     color: '#059669',
     marginBottom: 8,
@@ -2148,56 +2264,62 @@ const styles = StyleSheet.create({
     marginTop: 8,
     paddingTop: 8,
     borderTopWidth: 1,
-    borderTopColor: '#D1D5DB',
+    borderTopColor: '#E2E8F0',
   },
   finalProfitLabel: {
-    fontSize: 15,
+    fontSize: 14,
     color: '#059669',
     fontWeight: '800',
   },
   finalProfitValue: {
-    fontSize: 16,
+    fontSize: 15,
     color: '#059669',
     fontWeight: '800',
   },
   updateButton: {
-    backgroundColor: '#2563EB',
-    paddingVertical: 16,
-    borderRadius: 8,
-    alignItems: 'center',
     marginVertical: 16,
+    borderRadius: 14,
+    overflow: 'hidden',
   },
   updateButtonDisabled: {
-    backgroundColor: '#9CA3AF',
+    opacity: 0.6,
+  },
+  updateButtonGradient: {
+    paddingVertical: 16,
+    alignItems: 'center',
   },
   updateButtonText: {
     color: '#FFF',
     fontSize: 16,
     fontWeight: '700',
   },
-  // Add Item Modal Styles
   productItem: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#FFF',
-    padding: 12,
-    marginBottom: 8,
-    borderRadius: 8,
+    padding: 14,
+    marginBottom: 10,
+    borderRadius: 14,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: '#F1F5F9',
+    shadowColor: '#94A3B8',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
   },
   productInfo: {
     flex: 1,
   },
   productName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#111827',
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#0F172A',
     marginBottom: 4,
   },
   productDetails: {
-    fontSize: 12,
-    color: '#6B7280',
+    fontSize: 11,
+    color: '#64748B',
     marginBottom: 4,
   },
   productPricing: {
@@ -2205,20 +2327,20 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   productMrp: {
-    fontSize: 12,
-    color: '#6B7280',
+    fontSize: 11,
+    color: '#64748B',
   },
   productCost: {
-    fontSize: 12,
+    fontSize: 11,
     color: '#EF4444',
   },
   productSellPrice: {
-    fontSize: 12,
-    color: '#059669',
+    fontSize: 11,
+    color: '#10B981',
     fontWeight: '600',
   },
   addProductButton: {
-    backgroundColor: '#10B981',
+    backgroundColor: '#3B82F6',
     width: 36,
     height: 36,
     borderRadius: 18,

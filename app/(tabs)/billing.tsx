@@ -1,5 +1,7 @@
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { LinearGradient } from 'expo-linear-gradient';
+import * as Print from 'expo-print';
+import * as Sharing from 'expo-sharing';
 import {
   Calendar,
   ChevronDown,
@@ -19,7 +21,9 @@ import {
 } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
+  Modal,
   Platform,
   ScrollView,
   StatusBar,
@@ -46,6 +50,9 @@ import {
   updateProductStock,
 } from '../../lib/db';
 
+// ─────────────────────────────────────────────
+// Types
+// ─────────────────────────────────────────────
 interface CartItem extends Product {
   quantity: number;
   customRate?: number;
@@ -55,8 +62,129 @@ interface CartItem extends Product {
   discountAmount?: number;
 }
 
+interface ReceiptData {
+  shopName?: string;
+  shopAddress?: string;
+  billType: string;
+  date: string;
+  customerName: string;
+  phone?: string;
+  items: {
+    name: string;
+    qty: number;
+    rate: number;
+    total: number;
+    discount?: number;
+    discAmt: number;
+  }[];
+  subtotal: number;
+  itemDiscount: number;
+  billDiscountPct: number;
+  billDiscountAmt: number;
+  finalAmount: number;
+}
+
+// ─────────────────────────────────────────────
+// Bill Action Modal (Save / PDF / Print)
+// ─────────────────────────────────────────────
+interface BillActionModalProps {
+  visible: boolean;
+  onSave: () => void;
+  onPDF: () => void;
+  onPrint: () => void;
+  onClose: () => void;
+  printLoading?: boolean;
+}
+
+function BillActionModal({
+  visible,
+  onSave,
+  onPDF,
+  onPrint,
+  onClose,
+  printLoading = false,
+}: BillActionModalProps) {
+  return (
+    <Modal visible={visible} transparent animationType="fade">
+      <View style={am.overlay}>
+        <View style={am.card}>
+          <Text style={am.title}>Bill Generated!</Text>
+          <Text style={am.subtitle}>What would you like to do?</Text>
+
+          <TouchableOpacity style={[am.btn, am.saveBtn]} onPress={onSave}>
+            <Text style={am.btnText}>✅ Save Bill</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={[am.btn, am.pdfBtn]} onPress={onPDF}>
+            <Text style={am.btnText}>📄 Save as PDF</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[am.btn, am.printBtn]}
+            onPress={onPrint}
+            disabled={printLoading}
+          >
+            {printLoading ? (
+              <ActivityIndicator color="#FFF" size="small" />
+            ) : (
+              <Text style={am.btnText}>🖨️ Print (System Dialog)</Text>
+            )}
+          </TouchableOpacity>
+
+          <TouchableOpacity style={am.cancelBtn} onPress={onClose}>
+            <Text style={am.cancelText}>Cancel</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+const am = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  card: {
+    backgroundColor: '#FFF',
+    borderRadius: 16,
+    padding: 24,
+    width: '80%',
+    alignItems: 'stretch',
+  },
+  title: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#111827',
+    textAlign: 'center',
+    marginBottom: 4,
+  },
+  subtitle: {
+    fontSize: 14,
+    color: '#6B7280',
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  btn: {
+    borderRadius: 10,
+    paddingVertical: 14,
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  saveBtn: { backgroundColor: '#10B981' },
+  pdfBtn: { backgroundColor: '#8B5CF6' },
+  printBtn: { backgroundColor: '#2563EB' },
+  btnText: { color: '#FFF', fontSize: 15, fontWeight: '600' },
+  cancelBtn: { paddingVertical: 10, alignItems: 'center' },
+  cancelText: { color: '#EF4444', fontSize: 14, fontWeight: '500' },
+});
+
+// ─────────────────────────────────────────────
+// Main Component
+// ─────────────────────────────────────────────
 export default function WholesaleBilling() {
-  // States
   const [customerName, setCustomerName] = useState('');
   const [billType, setBillType] = useState<'Cash' | 'Credit'>('Cash');
   const [billingDate, setBillingDate] = useState(new Date());
@@ -68,12 +196,10 @@ export default function WholesaleBilling() {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [billDiscount, setBillDiscount] = useState<string>('');
 
-  // Categories from database
   const [categories, setCategories] = useState<Category[]>([]);
   const [allProducts, setAllProducts] = useState<Product[]>([]);
   const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
 
-  // Customer search states
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [filteredCustomers, setFilteredCustomers] = useState<Customer[]>([]);
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
@@ -87,139 +213,103 @@ export default function WholesaleBilling() {
   );
   const [lastPurchaseAmount, setLastPurchaseAmount] = useState<number>(0);
 
-  // Products from database
-  const [products, setProducts] = useState<Product[]>([]);
   const [isLoadingProducts, setIsLoadingProducts] = useState(false);
-
-  // Editable rates state
   const [editableRates, setEditableRates] = useState<{ [key: number]: string }>(
     {},
   );
-
-  // Item discounts state
   const [itemDiscounts, setItemDiscounts] = useState<{ [key: number]: string }>(
     {},
   );
 
-  // Initialize database and load customers & products
+  // Bill action modal
+  const [showActionModal, setShowActionModal] = useState(false);
+  const [printLoading, setPrintLoading] = useState(false);
+  const [pendingBillData, setPendingBillData] = useState<ReceiptData | null>(
+    null,
+  );
+
   useEffect(() => {
     initializeDatabase();
   }, []);
-
-  // Filter products when search query or category changes
   useEffect(() => {
     filterProducts();
   }, [searchQuery, selectedCategoryId, allProducts]);
-
-  // Load last purchase amount when selected customer changes
   useEffect(() => {
-    if (selectedCustomer) {
-      loadLastPurchaseAmount(selectedCustomer.id);
-    } else {
-      setLastPurchaseAmount(0);
-    }
+    if (selectedCustomer) loadLastPurchaseAmount(selectedCustomer.id);
+    else setLastPurchaseAmount(0);
   }, [selectedCustomer]);
 
   const initializeDatabase = async () => {
     try {
       setDbStatus('checking');
-
       if (!(await isSqliteAvailable())) {
-        console.warn('SQLite not available');
         setDbStatus('error');
         return;
       }
-
       await initDB();
       await loadCustomers();
       await loadCategories();
       await loadAllProducts();
       setDbStatus('ready');
-    } catch (error) {
-      console.error('Error initializing database:', error);
+    } catch {
       setDbStatus('error');
     }
   };
 
   const loadCategories = async () => {
     try {
-      const categoriesList = await getAllCategories();
-      setCategories(categoriesList);
-    } catch (error) {
-      console.error('Error loading categories:', error);
-    }
+      setCategories(await getAllCategories());
+    } catch {}
   };
 
   const loadAllProducts = async () => {
     try {
       setIsLoadingProducts(true);
-      const productsList = await getAllProducts();
-      setAllProducts(productsList);
-      setProducts(productsList);
+      const list = await getAllProducts();
+      setAllProducts(list);
       filterProducts();
-    } catch (error) {
-      console.error('Error loading products:', error);
-      Alert.alert('Error', 'Failed to load products from database');
+    } catch {
+      Alert.alert('Error', 'Failed to load products');
     } finally {
       setIsLoadingProducts(false);
     }
   };
 
   const filterProducts = () => {
-    let filtered = [...allProducts];
-
-    // Filter by search query
-    if (searchQuery.trim()) {
-      filtered = filtered.filter((p) =>
+    let f = [...allProducts];
+    if (searchQuery.trim())
+      f = f.filter((p) =>
         p.name.toLowerCase().includes(searchQuery.toLowerCase()),
       );
-    }
-
-    // Filter by category
-    if (selectedCategoryId !== null) {
-      filtered = filtered.filter((p) => p.categoryId === selectedCategoryId);
-    }
-
-    setFilteredProducts(filtered);
+    if (selectedCategoryId !== null)
+      f = f.filter((p) => p.categoryId === selectedCategoryId);
+    setFilteredProducts(f);
   };
 
-  // Load last purchase amount for customer
-  const loadLastPurchaseAmount = async (customerId: number) => {
+  const loadLastPurchaseAmount = async (id: number) => {
     try {
-      const amount = await getCustomerLastPurchaseAmount(customerId);
-      setLastPurchaseAmount(amount || 0);
-    } catch (error) {
-      console.error('Error loading last purchase amount:', error);
+      setLastPurchaseAmount((await getCustomerLastPurchaseAmount(id)) || 0);
+    } catch {
       setLastPurchaseAmount(0);
     }
   };
 
-  // Load customers from database
   const loadCustomers = async () => {
     try {
       setIsLoadingCustomers(true);
-      console.log('Loading customers...');
-
-      const customersList = await getAllCustomers();
-      console.log('Customers loaded from DB:', customersList);
-
-      setCustomers(customersList);
-      setFilteredCustomers(customersList);
-    } catch (error) {
-      console.error('Error loading customers:', error);
+      const list = await getAllCustomers();
+      setCustomers(list);
+      setFilteredCustomers(list);
+    } catch {
     } finally {
       setIsLoadingCustomers(false);
     }
   };
 
-  // Handle customer name input change
   const handleCustomerNameChange = (text: string) => {
-    console.log('Customer input changed:', text);
     setCustomerName(text);
-
-    if (text.length > 0) {
-      searchCustomers(text);
-    } else {
+    if (text.length > 0) searchCustomers(text);
+    else {
       setShowCustomerDropdown(false);
       setIsNewCustomer(false);
       setFilteredCustomers(customers);
@@ -228,58 +318,45 @@ export default function WholesaleBilling() {
     }
   };
 
-  // Search customers in database
   const searchCustomers = async (searchText: string) => {
     try {
       setIsLoadingCustomers(true);
       setShowCustomerDropdown(true);
-
-      console.log('Searching for:', searchText);
-      let searchResults: Customer[] = [];
-
+      let results: Customer[] = [];
       if (await isSqliteAvailable()) {
         try {
-          searchResults = await searchCustomersByName(searchText);
-        } catch (error) {
-          console.error('DB search failed, using local filter:', error);
-          searchResults = customers.filter((customer) =>
-            customer.name.toLowerCase().includes(searchText.toLowerCase()),
+          results = await searchCustomersByName(searchText);
+        } catch {
+          results = customers.filter((c) =>
+            c.name.toLowerCase().includes(searchText.toLowerCase()),
           );
         }
       } else {
-        searchResults = customers.filter((customer) =>
-          customer.name.toLowerCase().includes(searchText.toLowerCase()),
+        results = customers.filter((c) =>
+          c.name.toLowerCase().includes(searchText.toLowerCase()),
         );
       }
-
-      console.log('Search results:', searchResults);
-      setFilteredCustomers(searchResults);
-      setIsNewCustomer(searchResults.length === 0 && searchText.length > 0);
-    } catch (error) {
-      console.error('Error searching customers:', error);
-      const localResults = customers.filter((customer) =>
-        customer.name.toLowerCase().includes(searchText.toLowerCase()),
+      setFilteredCustomers(results);
+      setIsNewCustomer(results.length === 0 && searchText.length > 0);
+    } catch {
+      const r = customers.filter((c) =>
+        c.name.toLowerCase().includes(searchText.toLowerCase()),
       );
-      setFilteredCustomers(localResults);
-      setIsNewCustomer(localResults.length === 0 && searchText.length > 0);
+      setFilteredCustomers(r);
+      setIsNewCustomer(r.length === 0 && searchText.length > 0);
     } finally {
       setIsLoadingCustomers(false);
     }
   };
 
-  // Select customer from dropdown
   const selectCustomer = async (customer: Customer) => {
-    console.log('Customer selected:', customer);
     setCustomerName(customer.name);
     setSelectedCustomer(customer);
     setShowCustomerDropdown(false);
     setIsNewCustomer(false);
-
-    // Load last purchase amount for the selected customer
     await loadLastPurchaseAmount(customer.id);
   };
 
-  // Add new customer to database
   const handleAddNewCustomer = async () => {
     if (!customerName.trim()) {
       Alert.alert('Error', 'Please enter customer name');
@@ -287,185 +364,124 @@ export default function WholesaleBilling() {
     }
     try {
       if (await isSqliteAvailable()) {
-        const randomPhone = `9${Math.floor(100000000 + Math.random() * 900000000)}`;
-        const address = 'Address not provided';
-
-        const customerId = await insertCustomer(
+        const phone = `9${Math.floor(100000000 + Math.random() * 900000000)}`;
+        const id = await insertCustomer(
           customerName,
-          randomPhone,
+          phone,
           undefined,
-          address,
+          'Address not provided',
         );
-
-        const newCustomer: Customer = {
-          id: customerId,
+        const newC: Customer = {
+          id,
           name: customerName,
-          phone: randomPhone,
-          address: address,
+          phone,
+          address: 'Address not provided',
           totalPurchases: 0,
           type: 'customer',
         };
-
-        setSelectedCustomer(newCustomer);
-        setLastPurchaseAmount(0); // New customer has no last purchase
+        setSelectedCustomer(newC);
+        setLastPurchaseAmount(0);
         await loadCustomers();
-
-        Alert.alert(
-          'Success',
-          `Customer "${customerName}" added successfully!`,
-        );
+        Alert.alert('Success', `Customer "${customerName}" added!`);
       }
-
       setShowCustomerDropdown(false);
-    } catch (error) {
-      console.error('Error adding customer:', error);
+    } catch {
       Alert.alert('Error', 'Failed to add customer');
     }
   };
 
-  // Focus on customer input
   const handleCustomerInputFocus = () => {
-    console.log('Customer input focused, current customers:', customers.length);
-    if (customers.length > 0) {
-      setFilteredCustomers(customers);
-      setShowCustomerDropdown(true);
-    } else {
-      setShowCustomerDropdown(true);
-    }
+    setFilteredCustomers(customers);
+    setShowCustomerDropdown(true);
   };
 
-  // Refresh customers and products
   const handleRefresh = () => {
     loadCustomers();
     loadAllProducts();
-    if (selectedCustomer) {
-      loadLastPurchaseAmount(selectedCustomer.id);
-    }
+    if (selectedCustomer) loadLastPurchaseAmount(selectedCustomer.id);
   };
 
-  // Update wholesale rate for a product
-  const updateWholesaleRate = (productId: number, newRate: string) => {
-    if (newRate === '') {
-      setEditableRates((prev) => {
-        const updated = { ...prev };
-        delete updated[productId];
-        return updated;
+  const updateWholesaleRate = (id: number, val: string) => {
+    if (val === '') {
+      setEditableRates((p) => {
+        const u = { ...p };
+        delete u[id];
+        return u;
       });
       return;
     }
-
-    const sanitizedValue = newRate.replace(/[^0-9.]/g, '');
-    const parts = sanitizedValue.split('.');
-    if (parts.length > 2) return;
-
-    let finalValue = sanitizedValue;
-    if (
-      sanitizedValue.length > 1 &&
-      sanitizedValue.startsWith('0') &&
-      !sanitizedValue.startsWith('0.')
-    ) {
-      finalValue = sanitizedValue.substring(1);
-    }
-
-    setEditableRates((prev) => ({
-      ...prev,
-      [productId]: finalValue,
-    }));
+    const s = val.replace(/[^0-9.]/g, '');
+    if (s.split('.').length > 2) return;
+    setEditableRates((p) => ({ ...p, [id]: s }));
   };
 
-  // Update discount for a product
-  const updateItemDiscount = (productId: number, discount: string) => {
-    if (discount === '' || discount === '0') {
-      setItemDiscounts((prev) => {
-        const updated = { ...prev };
-        delete updated[productId];
-        return updated;
+  const updateItemDiscount = (id: number, val: string) => {
+    if (val === '' || val === '0') {
+      setItemDiscounts((p) => {
+        const u = { ...p };
+        delete u[id];
+        return u;
       });
-
-      setCart((prevCart) =>
-        prevCart.map((item) =>
-          item.id === productId
-            ? { ...item, discount: undefined, discountedPrice: undefined }
-            : item,
+      setCart((c) =>
+        c.map((i) =>
+          i.id === id
+            ? { ...i, discount: undefined, discountedPrice: undefined }
+            : i,
         ),
       );
       return;
     }
-
-    const sanitizedValue = discount.replace(/[^0-9.]/g, '');
-    const parts = sanitizedValue.split('.');
-    if (parts.length > 2) return;
-
-    const discountValue = parseFloat(sanitizedValue);
-    if (discountValue > 100) return;
-
-    setItemDiscounts((prev) => ({
-      ...prev,
-      [productId]: sanitizedValue,
-    }));
+    const s = val.replace(/[^0-9.]/g, '');
+    if (s.split('.').length > 2 || parseFloat(s) > 100) return;
+    setItemDiscounts((p) => ({ ...p, [id]: s }));
   };
 
-  // Apply discount to all items
   const applyDiscountToAll = () => {
     if (!billDiscount || parseFloat(billDiscount) === 0) {
-      Alert.alert('Info', 'Please enter a discount percentage first');
+      Alert.alert('Info', 'Enter a discount % first');
       return;
     }
-
-    const discountValue = parseFloat(billDiscount);
-    if (discountValue > 100) {
+    if (parseFloat(billDiscount) > 100) {
       Alert.alert('Error', 'Discount cannot exceed 100%');
       return;
     }
-
-    const newItemDiscounts: { [key: number]: string } = {};
-    cart.forEach((item) => {
-      newItemDiscounts[item.id] = billDiscount;
+    const nd: { [k: number]: string } = {};
+    cart.forEach((i) => {
+      nd[i.id] = billDiscount;
     });
-
-    setItemDiscounts(newItemDiscounts);
-    Alert.alert('Success', `Applied ${discountValue}% discount to all items`);
+    setItemDiscounts(nd);
+    Alert.alert('Success', `Applied ${billDiscount}% to all items`);
   };
 
   const updateCart = (product: Product, qty: number) => {
     if (qty <= 0) {
-      setCart(cart.filter((item) => item.id !== product.id));
-      setItemDiscounts((prev) => {
-        const updated = { ...prev };
-        delete updated[product.id];
-        return updated;
+      setCart((c) => c.filter((i) => i.id !== product.id));
+      setItemDiscounts((p) => {
+        const u = { ...p };
+        delete u[product.id];
+        return u;
       });
       return;
     }
-
-    const currentStock = product.stock;
-    if (qty > currentStock) {
-      Alert.alert(
-        'Error',
-        `Only ${currentStock} ${product.unit} available in stock`,
-      );
+    if (qty > product.stock) {
+      Alert.alert('Error', `Only ${product.stock} ${product.unit} in stock`);
       return;
     }
 
-    const existingItem = cart.find((i) => i.id === product.id);
     const customRate = editableRates[product.id]
       ? parseFloat(editableRates[product.id])
       : undefined;
-
     const discount = itemDiscounts[product.id]
       ? parseFloat(itemDiscounts[product.id])
       : undefined;
-
     const basePrice = customRate || product.sellPrice;
     const discountedPrice =
       discount && discount > 0
         ? parseFloat((basePrice * (1 - discount / 100)).toFixed(2))
         : undefined;
-
-    const itemTotal = discountedPrice
-      ? parseFloat((discountedPrice * qty).toFixed(2))
-      : parseFloat((basePrice * qty).toFixed(2));
-
+    const itemTotal = parseFloat(
+      ((discountedPrice || basePrice) * qty).toFixed(2),
+    );
     const discountAmount =
       discount && discount > 0
         ? parseFloat(
@@ -473,346 +489,309 @@ export default function WholesaleBilling() {
           )
         : 0;
 
-    if (existingItem) {
-      setCart(
-        cart.map((i) =>
-          i.id === product.id
-            ? {
-                ...i,
-                quantity: qty,
-                customRate: customRate,
-                discount: discount && discount > 0 ? discount : undefined,
-                discountedPrice: discountedPrice,
-                itemTotal: itemTotal,
-                discountAmount: discountAmount,
-              }
-            : i,
-        ),
-      );
-    } else {
-      setCart([
-        ...cart,
-        {
-          ...product,
-          quantity: qty,
-          customRate: customRate,
-          discount: discount && discount > 0 ? discount : undefined,
-          discountedPrice: discountedPrice,
-          itemTotal: itemTotal,
-          discountAmount: discountAmount,
-        },
-      ]);
-    }
+    const exists = cart.find((i) => i.id === product.id);
+    const newItem = {
+      ...product,
+      quantity: qty,
+      customRate,
+      discount: discount && discount > 0 ? discount : undefined,
+      discountedPrice,
+      itemTotal,
+      discountAmount,
+    };
+    if (exists)
+      setCart((c) => c.map((i) => (i.id === product.id ? newItem : i)));
+    else setCart((c) => [...c, newItem]);
   };
 
-  // Update cart quantity
-  const updateCartQuantity = (itemId: number, qty: number) => {
+  const updateCartQuantity = (id: number, qty: number) => {
     if (qty <= 0) {
-      setCart(cart.filter((item) => item.id !== itemId));
-      setItemDiscounts((prev) => {
-        const updated = { ...prev };
-        delete updated[itemId];
-        return updated;
+      setCart((c) => c.filter((i) => i.id !== id));
+      setItemDiscounts((p) => {
+        const u = { ...p };
+        delete u[id];
+        return u;
       });
       return;
     }
-
-    const item = cart.find((i) => i.id === itemId);
+    const item = cart.find((i) => i.id === id);
     if (item && qty > item.stock) {
-      Alert.alert(
-        'Error',
-        `Only ${item.stock} ${item.unit} available in stock`,
-      );
+      Alert.alert('Error', `Only ${item.stock} ${item.unit} in stock`);
       return;
     }
-
-    setCart((prevCart) =>
-      prevCart.map((item) => {
-        if (item.id === itemId) {
-          const basePrice = item.customRate || item.sellPrice;
-          const discountedPrice = item.discountedPrice || basePrice;
-          const itemTotal = parseFloat((discountedPrice * qty).toFixed(2));
-          const discountAmount =
-            item.discount && item.discount > 0
-              ? parseFloat(((basePrice - discountedPrice) * qty).toFixed(2))
-              : 0;
-
-          return {
-            ...item,
-            quantity: qty,
-            itemTotal: itemTotal,
-            discountAmount: discountAmount,
-          };
-        }
-        return item;
+    setCart((c) =>
+      c.map((i) => {
+        if (i.id !== id) return i;
+        const base = i.customRate || i.sellPrice;
+        const fp = i.discountedPrice || base;
+        return {
+          ...i,
+          quantity: qty,
+          itemTotal: parseFloat((fp * qty).toFixed(2)),
+          discountAmount:
+            i.discount && i.discount > 0
+              ? parseFloat(((base - fp) * qty).toFixed(2))
+              : 0,
+        };
       }),
     );
   };
 
   const removeFromCart = (id: number) => {
-    setCart(cart.filter((item) => item.id !== id));
-    setItemDiscounts((prev) => {
-      const updated = { ...prev };
-      delete updated[id];
-      return updated;
+    setCart((c) => c.filter((i) => i.id !== id));
+    setItemDiscounts((p) => {
+      const u = { ...p };
+      delete u[id];
+      return u;
     });
   };
 
   const getTotalItems = () => cart.length;
-  const getTotalQuantity = () =>
-    cart.reduce((sum, item) => sum + item.quantity, 0);
-
-  // Calculate item total with discount
-  const getItemTotal = (item: CartItem) => {
-    const basePrice = item.customRate || item.sellPrice;
-    const finalPrice = item.discountedPrice || basePrice;
-    const total = finalPrice * item.quantity;
-    return parseFloat(total.toFixed(2));
-  };
-
-  // Calculate individual item discount amount
-  const getItemDiscountAmount = (item: CartItem) => {
-    const basePrice = item.customRate || item.sellPrice;
-    const finalPrice = item.discountedPrice || basePrice;
-    const discountAmount = (basePrice - finalPrice) * item.quantity;
-    return parseFloat(discountAmount.toFixed(2));
-  };
-
-  // Calculate subtotal (before any bill discount)
-  const getSubtotal = () => {
-    const subtotal = cart.reduce((sum, item) => {
-      const basePrice = item.customRate || item.sellPrice;
-      return sum + basePrice * item.quantity;
-    }, 0);
-    return parseFloat(subtotal.toFixed(2));
-  };
-
-  // Calculate total discount amount from items
-  const getTotalItemDiscount = () => {
-    const totalDiscount = cart.reduce((sum, item) => {
-      return sum + getItemDiscountAmount(item);
-    }, 0);
-    return parseFloat(totalDiscount.toFixed(2));
-  };
-
-  // Calculate amount after item discount
-  const getAmountAfterItemDiscount = () => {
-    return getSubtotal() - getTotalItemDiscount();
-  };
-
-  // Calculate bill discount amount
-  const getBillDiscountAmount = () => {
-    const amountAfterItemDiscount = getAmountAfterItemDiscount();
-    const billDiscountValue = billDiscount ? parseFloat(billDiscount) : 0;
-    if (billDiscountValue > 0) {
-      return parseFloat(
-        (amountAfterItemDiscount * (billDiscountValue / 100)).toFixed(2),
-      );
-    }
-    return 0;
-  };
-
-  // Calculate final amount after bill discount
-  const getFinalAmount = () => {
-    const amountAfterItemDiscount = getAmountAfterItemDiscount();
-    const billDiscountAmount = getBillDiscountAmount();
-    return parseFloat(
-      (amountAfterItemDiscount - billDiscountAmount).toFixed(2),
+  const getTotalQuantity = () => cart.reduce((s, i) => s + i.quantity, 0);
+  const getItemTotal = (item: CartItem) =>
+    parseFloat(
+      (
+        (item.discountedPrice || item.customRate || item.sellPrice) *
+        item.quantity
+      ).toFixed(2),
     );
+  const getItemDiscountAmount = (item: CartItem) => {
+    const base = item.customRate || item.sellPrice;
+    const fp = item.discountedPrice || base;
+    return parseFloat(((base - fp) * item.quantity).toFixed(2));
   };
-
-  // Calculate total cost price (what you paid for the products)
-  const getTotalCostPrice = () => {
-    const totalCost = cart.reduce((sum, item) => {
-      return sum + item.purchasePrice * item.quantity;
-    }, 0);
-    return parseFloat(totalCost.toFixed(2));
+  const getSubtotal = () =>
+    parseFloat(
+      cart
+        .reduce((s, i) => s + (i.customRate || i.sellPrice) * i.quantity, 0)
+        .toFixed(2),
+    );
+  const getTotalItemDiscount = () =>
+    parseFloat(
+      cart.reduce((s, i) => s + getItemDiscountAmount(i), 0).toFixed(2),
+    );
+  const getAmountAfterItemDiscount = () =>
+    getSubtotal() - getTotalItemDiscount();
+  const getBillDiscountAmount = () => {
+    const pct = billDiscount ? parseFloat(billDiscount) : 0;
+    return pct > 0
+      ? parseFloat(((getAmountAfterItemDiscount() * pct) / 100).toFixed(2))
+      : 0;
   };
-
-  // Calculate profit before any discounts
-  const getProfitBeforeAnyDiscount = () => {
-    const subtotal = getSubtotal();
-    const totalCost = getTotalCostPrice();
-    return parseFloat((subtotal - totalCost).toFixed(2));
-  };
-
-  // Calculate profit after item discounts but before bill discount
-  const getProfitAfterItemDiscount = () => {
-    const amountAfterItemDiscount = getAmountAfterItemDiscount();
-    const totalCost = getTotalCostPrice();
-    return parseFloat((amountAfterItemDiscount - totalCost).toFixed(2));
-  };
-
-  // Calculate final profit after all discounts (bill discount included)
-  const getFinalProfit = () => {
-    const finalAmount = getFinalAmount();
-    const totalCost = getTotalCostPrice();
-    return parseFloat((finalAmount - totalCost).toFixed(2));
-  };
-
-  // Calculate profit margin percentage
+  const getFinalAmount = () =>
+    parseFloat(
+      (getAmountAfterItemDiscount() - getBillDiscountAmount()).toFixed(2),
+    );
+  const getTotalCostPrice = () =>
+    parseFloat(
+      cart.reduce((s, i) => s + i.purchasePrice * i.quantity, 0).toFixed(2),
+    );
+  const getProfitBeforeAnyDiscount = () =>
+    parseFloat((getSubtotal() - getTotalCostPrice()).toFixed(2));
+  const getProfitAfterItemDiscount = () =>
+    parseFloat((getAmountAfterItemDiscount() - getTotalCostPrice()).toFixed(2));
+  const getFinalProfit = () =>
+    parseFloat((getFinalAmount() - getTotalCostPrice()).toFixed(2));
   const getProfitMargin = () => {
-    const finalProfit = getFinalProfit();
-    const finalAmount = getFinalAmount();
-    if (finalAmount === 0) return 0;
-    return parseFloat(((finalProfit / finalAmount) * 100).toFixed(2));
+    const fa = getFinalAmount();
+    return fa === 0
+      ? 0
+      : parseFloat(((getFinalProfit() / fa) * 100).toFixed(2));
   };
 
-  // Update product stock in database
   const updateProductStocks = async () => {
-    try {
-      for (const item of cart) {
-        const newStock = item.stock - item.quantity;
-        if (newStock < 0) {
-          throw new Error(`Insufficient stock for ${item.name}`);
-        }
-
-        await updateProductStock(item.id, newStock);
-        console.log(
-          `Updated stock for ${item.name}: ${item.stock} -> ${newStock}`,
-        );
-      }
-    } catch (error) {
-      console.error('Error updating product stocks:', error);
-      throw error;
+    for (const item of cart) {
+      const ns = item.stock - item.quantity;
+      if (ns < 0) throw new Error(`Insufficient stock for ${item.name}`);
+      await updateProductStock(item.id, ns);
     }
   };
 
+  // Build receipt data object
+  const buildReceiptData = (): ReceiptData => ({
+    shopName: 'Bill-Karo',
+    shopAddress: 'Your Business Address',
+    billType,
+    date: billingDate.toLocaleDateString('en-IN'),
+    customerName,
+    phone: selectedCustomer?.phone,
+    items: cart.map((item) => ({
+      name: item.name,
+      qty: item.quantity,
+      rate: item.customRate || item.sellPrice,
+      total: getItemTotal(item),
+      discount: item.discount,
+      discAmt: getItemDiscountAmount(item),
+    })),
+    subtotal: getSubtotal(),
+    itemDiscount: getTotalItemDiscount(),
+    billDiscountPct: billDiscount ? parseFloat(billDiscount) : 0,
+    billDiscountAmt: getBillDiscountAmount(),
+    finalAmount: getFinalAmount(),
+  });
+
+  // Build HTML for PDF / Print
+  const buildHtml = (d: ReceiptData): string => `
+  <html><head><style>
+    body { font-family: monospace; font-size: 12px; margin: 20px; max-width: 300px; }
+    h2 { text-align: center; font-size: 16px; margin: 0; }
+    p  { text-align: center; margin: 2px 0; font-size: 11px; }
+    hr { border: 1px solid #000; }
+    table { width: 100%; border-collapse: collapse; font-size: 11px; }
+    th { border-bottom: 1px solid #000; text-align: left; padding: 2px; }
+    td { padding: 2px; }
+    .right { text-align: right; }
+    .total { font-size: 15px; font-weight: bold; }
+    .section { margin-top: 8px; }
+  </style></head><body>
+    <h2>${d.shopName || 'Bill-Karo'}</h2>
+    ${d.shopAddress ? `<p>${d.shopAddress}</p>` : ''}
+    <hr/>
+    <div class="section">
+      <b>Customer:</b> ${d.customerName}<br/>
+      ${d.phone ? `<b>Phone:</b> ${d.phone}<br/>` : ''}
+      <b>Date:</b> ${d.date} &nbsp; <b>Type:</b> ${d.billType}
+    </div>
+    <hr/>
+    <table>
+      <tr><th>Item</th><th class="right">Qty</th><th class="right">Rate</th><th class="right">Total</th></tr>
+      ${d.items
+        .map(
+          (i) => `
+        <tr>
+          <td>${i.name}</td>
+          <td class="right">${i.qty}</td>
+          <td class="right">₹${i.rate.toFixed(2)}</td>
+          <td class="right">₹${i.total.toFixed(2)}</td>
+        </tr>
+        ${i.discount && i.discount > 0 ? `<tr><td colspan="3" style="font-size:10px;color:#555">  Discount ${i.discount}%</td><td class="right" style="color:red;font-size:10px">-₹${i.discAmt.toFixed(2)}</td>` : ''}
+      `,
+        )
+        .join('')}
+    </table>
+    <hr/>
+    <table>
+      <tr><td><b>Subtotal</b></td><td class="right">₹${d.subtotal.toFixed(2)}</td></tr>
+      ${d.itemDiscount > 0 ? `<tr><td>Item Discount</td><td class="right" style="color:red">-₹${d.itemDiscount.toFixed(2)}</td></tr>` : ''}
+      ${d.billDiscountPct > 0 ? `<tr><td>Bill Disc (${d.billDiscountPct}%)</td><td class="right" style="color:red">-₹${d.billDiscountAmt.toFixed(2)}</td></tr>` : ''}
+      <tr><td class="total">TOTAL</td><td class="right total">₹${d.finalAmount.toFixed(2)}</td></tr>
+    </table>
+    <hr/>
+    <p style="text-align:center;margin-top:10px">Thank you for your business!</p>
+  </body></html>`;
+
+  // Print using Android system print dialog (via expo-print)
+  const handlePrint = async () => {
+    if (!pendingBillData) return;
+    setPrintLoading(true);
+    try {
+      const html = buildHtml(pendingBillData);
+      await Print.printAsync({ html });
+    } catch (error: any) {
+      Alert.alert('Print Error', error.message || 'Failed to print');
+    } finally {
+      setPrintLoading(false);
+      setShowActionModal(false);
+      resetForm();
+    }
+  };
+
+  // Save only (already saved to DB)
+  const handleSaveOnly = async () => {
+    setShowActionModal(false);
+    resetForm();
+    Alert.alert('Saved', '✅ Bill saved successfully!');
+  };
+
+  // Save as PDF and share
+  const handleSavePDF = async () => {
+    setShowActionModal(false);
+    if (!pendingBillData) return;
+    try {
+      const html = buildHtml(pendingBillData);
+      const { uri } = await Print.printToFileAsync({ html, base64: false });
+      await Sharing.shareAsync(uri, {
+        mimeType: 'application/pdf',
+        dialogTitle: 'Save Bill PDF',
+      });
+    } catch (e: any) {
+      Alert.alert('Error', 'Failed to generate PDF: ' + e.message);
+    }
+    resetForm();
+  };
+
+  // Generate Bill: validate → save DB → show action modal
   const generateBill = async () => {
     if (!customerName.trim()) {
       Alert.alert('Error', 'Please enter customer name');
       return;
     }
-
     if (cart.length === 0) {
       Alert.alert('Error', 'Please add items to cart');
       return;
     }
-
     if (!selectedCustomer) {
       Alert.alert('Error', 'Please select a customer from the dropdown');
       return;
     }
 
     try {
-      const subtotal = getSubtotal();
-      const totalItemDiscount = getTotalItemDiscount();
-      const billDiscountAmount = getBillDiscountAmount();
-      const finalAmount = getFinalAmount();
-      const finalProfit = getFinalProfit();
-      const profitMargin = getProfitMargin();
-
+      const rd = buildReceiptData();
       await updateProductStocks();
 
       if (await isSqliteAvailable()) {
-        // Prepare cart items with detailed pricing information
-        const cartItems = cart.map((item) => {
-          const basePrice = item.customRate || item.sellPrice;
-          const finalPrice = item.discountedPrice || basePrice;
-          const itemTotal = getItemTotal(item);
-          const itemDiscountAmount = getItemDiscountAmount(item);
-          const purchaseRate = item.purchasePrice;
-
-          return {
-            name: item.name,
-            quantity: item.quantity,
-            rate: basePrice,
-            purchaseRate: purchaseRate,
-            finalRate: finalPrice,
-            discountPercent: item.discount || 0,
-            discountAmount: itemDiscountAmount,
-            total: itemTotal,
-          };
-        });
+        const cartItems = cart.map((item) => ({
+          name: item.name,
+          quantity: item.quantity,
+          rate: item.customRate || item.sellPrice,
+          purchaseRate: item.purchasePrice,
+          finalRate: item.discountedPrice || item.customRate || item.sellPrice,
+          discountPercent: item.discount || 0,
+          discountAmount: getItemDiscountAmount(item),
+          total: getItemTotal(item),
+        }));
 
         await insertBill(
           selectedCustomer.id,
           customerName,
           billType,
           billingDate.toISOString().split('T')[0],
-          finalAmount,
+          rd.finalAmount,
           cartItems,
-          billDiscount ? parseFloat(billDiscount) : 0,
-          subtotal,
-          totalItemDiscount,
-          billDiscountAmount,
+          rd.billDiscountPct,
+          rd.subtotal,
+          rd.itemDiscount,
+          rd.billDiscountAmt,
         );
 
-        await updateCustomerPurchases(selectedCustomer.id, finalAmount);
+        await updateCustomerPurchases(selectedCustomer.id, rd.finalAmount);
       }
 
-      console.log('Bill Generated:', {
-        customerId: selectedCustomer.id,
-        customerName,
-        billType,
-        billingDate,
-        cart: cart.map((item) => ({
-          name: item.name,
-          quantity: item.quantity,
-          sellingPrice: item.customRate || item.sellPrice,
-          purchasePrice: item.purchasePrice,
-          itemTotal: getItemTotal(item),
-          itemProfit: getItemTotal(item) - item.purchasePrice * item.quantity,
-        })),
-        subtotal: subtotal,
-        itemDiscount: totalItemDiscount,
-        billDiscount: billDiscount,
-        billDiscountAmount: billDiscountAmount,
-        finalAmount: finalAmount,
-        totalCost: getTotalCostPrice(),
-        finalProfit: finalProfit,
-        profitMargin: profitMargin,
-      });
-
-      const discountSummary = [];
-      if (totalItemDiscount > 0) {
-        discountSummary.push(`Item Discount: ₹${totalItemDiscount.toFixed(2)}`);
-      }
-      if (billDiscount && parseFloat(billDiscount) > 0) {
-        discountSummary.push(
-          `Bill Discount: ${billDiscount}% (₹${billDiscountAmount.toFixed(2)})`,
-        );
-      }
-
-      Alert.alert(
-        'Success',
-        `✅ Bill Generated Successfully!\n\n` +
-          `👤 Customer: ${customerName}\n` +
-          `📅 Date: ${billingDate.toLocaleDateString()}\n\n` +
-          `💰 Bill Summary:\n` +
-          `Subtotal: ₹${subtotal.toFixed(2)}\n` +
-          `${discountSummary.join('\n')}\n` +
-          `────────────────\n` +
-          `Final Amount: ₹${finalAmount.toFixed(2)}\n\n` +
-          `📊 Profit Analysis:\n` +
-          `Total Cost: ₹${getTotalCostPrice().toFixed(2)}\n` +
-          `Final Profit: ₹${finalProfit.toFixed(2)}\n` +
-          `Profit Margin: ${profitMargin}%`,
-      );
-
-      // Reset form and reload
-      setCustomerName('');
-      setCart([]);
-      setShowCustomerDropdown(false);
-      setSelectedCustomer(null);
-      setEditableRates({});
-      setItemDiscounts({});
-      setBillDiscount('');
-      setLastPurchaseAmount(0);
-
-      await loadAllProducts();
-    } catch (error) {
-      console.error('Error generating bill:', error);
-      Alert.alert('Error', 'Failed to generate bill');
+      setPendingBillData(rd);
+      setShowActionModal(true);
+    } catch (e: any) {
+      Alert.alert('Error', e.message || 'Failed to generate bill');
     }
   };
 
-  const onDateChange = (event: any, selectedDate?: Date) => {
-    setShowDatePicker(Platform.OS === 'ios');
-    if (selectedDate) setBillingDate(selectedDate);
+  const resetForm = async () => {
+    setCustomerName('');
+    setCart([]);
+    setShowCustomerDropdown(false);
+    setSelectedCustomer(null);
+    setEditableRates({});
+    setItemDiscounts({});
+    setBillDiscount('');
+    setLastPurchaseAmount(0);
+    setPendingBillData(null);
+    await loadAllProducts();
   };
 
-  // Render customer item for the dropdown
+  const onDateChange = (_: any, d?: Date) => {
+    setShowDatePicker(Platform.OS === 'ios');
+    if (d) setBillingDate(d);
+  };
+
   const renderCustomerItem = (customer: Customer) => (
     <TouchableOpacity
       key={customer.id.toString()}
@@ -820,7 +799,7 @@ export default function WholesaleBilling() {
       onPress={() => selectCustomer(customer)}
     >
       <View style={styles.customerIcon}>
-        <User size={16} color="#2563EB" />
+        <User size={16} color="#3B82F6" />
       </View>
       <View style={styles.customerInfo}>
         <Text style={styles.customerName}>{customer.name}</Text>
@@ -852,21 +831,29 @@ export default function WholesaleBilling() {
 
   return (
     <View style={styles.container}>
-      <StatusBar backgroundColor="#2563EB" barStyle="light-content" />
+      <StatusBar backgroundColor="#0F172A" barStyle="light-content" />
 
-      {/* Header */}
+      {/* Action Modal */}
+      <BillActionModal
+        visible={showActionModal}
+        onSave={handleSaveOnly}
+        onPDF={handleSavePDF}
+        onPrint={handlePrint}
+        onClose={() => setShowActionModal(false)}
+        printLoading={printLoading}
+      />
+
+      {/* Header with Dashboard Theme */}
       <LinearGradient
-        colors={['#2563EB', '#1D4ED8']}
+        colors={['#0F172A', '#1E3A8A', '#1D4ED8']}
         start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 0 }}
+        end={{ x: 1, y: 1 }}
         style={styles.headerGradient}
       >
         <View style={styles.headerContent}>
           <View style={styles.headerTextContainer}>
-            <Text style={styles.headerTitle}>Wholesale POS</Text>
-            <Text style={styles.headerSubtitle}>
-              Professional Billing System
-            </Text>
+            <Text style={styles.headerTitle}>Bill-Karo</Text>
+            <Text style={styles.headerSubtitle}>Create New Bill</Text>
           </View>
           <View style={styles.headerRight}>
             <TouchableOpacity
@@ -888,13 +875,11 @@ export default function WholesaleBilling() {
       </LinearGradient>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {/* Database Status */}
         {dbStatus === 'checking' && (
           <View style={styles.statusBanner}>
             <Text style={styles.statusText}>Initializing database...</Text>
           </View>
         )}
-
         {dbStatus === 'error' && (
           <View style={[styles.statusBanner, styles.errorBanner]}>
             <Text style={styles.statusText}>
@@ -911,7 +896,6 @@ export default function WholesaleBilling() {
               <Text style={styles.refreshText}>Refresh</Text>
             </TouchableOpacity>
           </View>
-
           <View style={styles.customerSection}>
             <View style={styles.inputContainer}>
               <User size={20} color="#6B7280" style={styles.inputIcon} />
@@ -924,7 +908,6 @@ export default function WholesaleBilling() {
                 onFocus={handleCustomerInputFocus}
               />
             </View>
-
             <TouchableOpacity
               style={[
                 styles.billTypeButton,
@@ -943,7 +926,6 @@ export default function WholesaleBilling() {
             </TouchableOpacity>
           </View>
 
-          {/* Selected Customer Details */}
           {selectedCustomer && (
             <View style={styles.selectedCustomerInfo}>
               <Text style={styles.selectedCustomerLabel}>
@@ -951,7 +933,7 @@ export default function WholesaleBilling() {
               </Text>
               <View style={styles.customerDetailRow}>
                 <View style={styles.detailItem}>
-                  <Phone size={16} color="#2563EB" />
+                  <Phone size={16} color="#3B82F6" />
                   <Text style={styles.detailText}>
                     {selectedCustomer.phone}
                   </Text>
@@ -959,7 +941,7 @@ export default function WholesaleBilling() {
                 {selectedCustomer.address &&
                   selectedCustomer.address !== 'Address not provided' && (
                     <View style={styles.detailItem}>
-                      <MapPin size={16} color="#2563EB" />
+                      <MapPin size={16} color="#3B82F6" />
                       <Text style={styles.detailText}>
                         {selectedCustomer.address}
                       </Text>
@@ -976,10 +958,7 @@ export default function WholesaleBilling() {
                   <Text style={styles.purchaseStatsText}>
                     {(() => {
                       const d = new Date(selectedCustomer.lastPurchase);
-                      const day = String(d.getDate()).padStart(2, '0');
-                      const month = String(d.getMonth() + 1).padStart(2, '0');
-                      const year = d.getFullYear();
-                      return `Last Purchase Date: ${day}-${month}-${year}`;
+                      return `Last Purchase Date: ${String(d.getDate()).padStart(2, '0')}-${String(d.getMonth() + 1).padStart(2, '0')}-${d.getFullYear()}`;
                     })()}
                   </Text>
                 )}
@@ -987,7 +966,6 @@ export default function WholesaleBilling() {
             </View>
           )}
 
-          {/* Customer Dropdown */}
           {showCustomerDropdown && (
             <View style={styles.customerDropdown}>
               {isLoadingCustomers ? (
@@ -1014,7 +992,7 @@ export default function WholesaleBilling() {
               ) : filteredCustomers.length > 0 ? (
                 <ScrollView
                   style={styles.customerList}
-                  nestedScrollEnabled={true}
+                  nestedScrollEnabled
                   keyboardShouldPersistTaps="handled"
                 >
                   {filteredCustomers.map(renderCustomerItem)}
@@ -1023,7 +1001,7 @@ export default function WholesaleBilling() {
                 <View style={styles.noCustomersContainer}>
                   <Text style={styles.noCustomersText}>No customers found</Text>
                   <Text style={styles.noCustomersSubtext}>
-                    Try a different search term or add a new customer
+                    Try different search or add new
                   </Text>
                 </View>
               )}
@@ -1039,7 +1017,7 @@ export default function WholesaleBilling() {
             onPress={() => setShowDatePicker(true)}
           >
             <LinearGradient
-              colors={['#8B5CF6', '#EC4899']}
+              colors={['#3B82F6', '#1D4ED8']}
               style={styles.dateIcon}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
@@ -1052,7 +1030,6 @@ export default function WholesaleBilling() {
             </View>
             <ChevronDown size={20} color="#6B7280" />
           </TouchableOpacity>
-
           {showDatePicker && (
             <DateTimePicker
               value={billingDate}
@@ -1061,7 +1038,6 @@ export default function WholesaleBilling() {
               onChange={onDateChange}
             />
           )}
-
           <View style={styles.searchContainer}>
             <Search size={20} color="#6B7280" />
             <TextInput
@@ -1147,16 +1123,13 @@ export default function WholesaleBilling() {
                   ? 'Try a different search'
                   : selectedCategoryId !== null
                     ? 'No products in this category'
-                    : 'No products available in database'}
+                    : 'No products in database'}
               </Text>
             </View>
           ) : (
             filteredProducts.map((product) => {
               const cartItem = cart.find((i) => i.id === product.id);
               const quantity = cartItem ? cartItem.quantity : 0;
-              const currentRate = editableRates[product.id] || '';
-              const currentDiscount = itemDiscounts[product.id] || '';
-
               return (
                 <View key={product.id} style={styles.productCard}>
                   <View style={styles.productInfo}>
@@ -1185,9 +1158,9 @@ export default function WholesaleBilling() {
                             editableRates[product.id] !== undefined &&
                               styles.rateInputModified,
                           ]}
-                          value={currentRate}
-                          onChangeText={(text) =>
-                            updateWholesaleRate(product.id, text)
+                          value={editableRates[product.id] || ''}
+                          onChangeText={(t) =>
+                            updateWholesaleRate(product.id, t)
                           }
                           keyboardType="decimal-pad"
                           placeholder={product.sellPrice.toFixed(2)}
@@ -1202,9 +1175,9 @@ export default function WholesaleBilling() {
                             itemDiscounts[product.id] !== undefined &&
                               styles.discountInputActive,
                           ]}
-                          value={currentDiscount}
-                          onChangeText={(text) =>
-                            updateItemDiscount(product.id, text)
+                          value={itemDiscounts[product.id] || ''}
+                          onChangeText={(t) =>
+                            updateItemDiscount(product.id, t)
                           }
                           keyboardType="decimal-pad"
                           placeholder="0"
@@ -1269,7 +1242,6 @@ export default function WholesaleBilling() {
             </Text>
           </View>
 
-          {/* Bill Discount Section */}
           {cart.length > 0 && (
             <View style={styles.billDiscountSection}>
               <View style={styles.billDiscountHeader}>
@@ -1286,12 +1258,9 @@ export default function WholesaleBilling() {
                 <TextInput
                   style={styles.billDiscountInput}
                   value={billDiscount}
-                  onChangeText={(text) => {
-                    const sanitized = text.replace(/[^0-9.]/g, '');
-                    const parts = sanitized.split('.');
-                    if (parts.length <= 2) {
-                      setBillDiscount(sanitized);
-                    }
+                  onChangeText={(t) => {
+                    const s = t.replace(/[^0-9.]/g, '');
+                    if (s.split('.').length <= 2) setBillDiscount(s);
                   }}
                   keyboardType="decimal-pad"
                   placeholder="Enter discount %"
@@ -1430,7 +1399,6 @@ export default function WholesaleBilling() {
                     ₹{getSubtotal().toFixed(2)}
                   </Text>
                 </View>
-
                 {getTotalItemDiscount() > 0 && (
                   <View style={styles.summaryRow}>
                     <Text style={styles.summaryLabel}>Item Discount:</Text>
@@ -1439,14 +1407,12 @@ export default function WholesaleBilling() {
                     </Text>
                   </View>
                 )}
-
                 <View style={styles.summaryRow}>
                   <Text style={styles.summaryLabel}>After Item Discount:</Text>
                   <Text style={styles.summaryValue}>
                     ₹{getAmountAfterItemDiscount().toFixed(2)}
                   </Text>
                 </View>
-
                 {billDiscount && parseFloat(billDiscount) > 0 && (
                   <View style={styles.summaryRow}>
                     <Text style={styles.summaryLabel}>
@@ -1457,7 +1423,6 @@ export default function WholesaleBilling() {
                     </Text>
                   </View>
                 )}
-
                 <View style={[styles.summaryRow, styles.finalTotalRow]}>
                   <Text style={styles.finalTotalLabel}>Final Amount:</Text>
                   <Text style={styles.finalTotalValue}>
@@ -1465,17 +1430,14 @@ export default function WholesaleBilling() {
                   </Text>
                 </View>
 
-                {/* Profit Analysis */}
                 <View style={styles.profitSection}>
                   <Text style={styles.profitSectionTitle}>Profit Analysis</Text>
-
                   <View style={styles.summaryRow}>
                     <Text style={styles.summaryLabel}>Total Cost:</Text>
                     <Text style={styles.summaryValue}>
                       ₹{getTotalCostPrice().toFixed(2)}
                     </Text>
                   </View>
-
                   <View style={styles.summaryRow}>
                     <Text style={styles.summaryLabel}>
                       Profit Before Discount:
@@ -1484,7 +1446,6 @@ export default function WholesaleBilling() {
                       ₹{getProfitBeforeAnyDiscount().toFixed(2)}
                     </Text>
                   </View>
-
                   <View style={styles.summaryRow}>
                     <Text style={styles.summaryLabel}>
                       Profit After Item Disc:
@@ -1493,7 +1454,6 @@ export default function WholesaleBilling() {
                       ₹{getProfitAfterItemDiscount().toFixed(2)}
                     </Text>
                   </View>
-
                   <View style={[styles.summaryRow, styles.finalProfitRow]}>
                     <Text style={styles.finalProfitLabel}>
                       Final Net Profit:
@@ -1502,7 +1462,6 @@ export default function WholesaleBilling() {
                       ₹{getFinalProfit().toFixed(2)}
                     </Text>
                   </View>
-
                   <View style={styles.summaryRow}>
                     <Text style={styles.summaryLabel}>Profit Margin:</Text>
                     <Text style={[styles.summaryValue, styles.profitPositive]}>
@@ -1523,37 +1482,44 @@ export default function WholesaleBilling() {
   );
 }
 
+// ─────────────────────────────────────────────
+// Styles - Updated with Dashboard Theme
+// ─────────────────────────────────────────────
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F3F4F6' },
+  container: { flex: 1, backgroundColor: '#F1F5F9' },
+
+  // Updated Header with Dashboard Theme
   headerGradient: {
-    paddingTop: 50,
-    paddingBottom: 16,
+    paddingTop: Platform.OS === 'ios' ? 58 : 44,
+    paddingBottom: 24,
+    borderBottomLeftRadius: 32,
+    borderBottomRightRadius: 32,
+    elevation: 12,
+    shadowColor: '#1E3A8A',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.35,
+    shadowRadius: 20,
   },
   headerContent: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 16,
+    paddingHorizontal: 20,
   },
   headerTextContainer: {},
-  headerRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  refreshButton: {
-    padding: 8,
-  },
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  refreshButton: { padding: 8 },
   headerTitle: {
-    fontSize: 22,
-    fontWeight: '700',
+    fontSize: 28,
+    fontWeight: '900',
     color: '#FFF',
-    marginTop: 8,
+    letterSpacing: 1,
   },
   headerSubtitle: {
-    fontSize: 14,
-    color: '#E0E7FF',
+    fontSize: 13,
+    color: '#93C5FD',
     marginTop: 2,
+    fontWeight: '500',
   },
   cartBadge: { position: 'relative' },
   badge: {
@@ -1566,24 +1532,21 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
   },
   badgeText: { color: '#FFF', fontSize: 10, fontWeight: '700' },
-  content: { flex: 1, paddingHorizontal: 16 },
-  section: { marginTop: 16, zIndex: 1 },
+  content: { flex: 1, paddingHorizontal: 20, paddingTop: 20 },
+  section: { marginBottom: 20 },
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 12,
   },
   sectionTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#111827',
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#0F172A',
+    letterSpacing: 0.3,
   },
-  refreshText: {
-    fontSize: 12,
-    color: '#2563EB',
-    fontWeight: '500',
-  },
+  refreshText: { fontSize: 13, color: '#3B82F6', fontWeight: '600' },
   customerSection: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1595,24 +1558,19 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#FFF',
-    borderRadius: 8,
+    borderRadius: 12,
     paddingHorizontal: 12,
     borderWidth: 1,
-    borderColor: '#D1D5DB',
+    borderColor: '#E2E8F0',
   },
   inputIcon: { marginRight: 8 },
-  customerInput: {
-    flex: 1,
-    height: 40,
-    color: '#111827',
-    fontSize: 14,
-  },
+  customerInput: { flex: 1, height: 44, color: '#0F172A', fontSize: 15 },
   billTypeButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 12,
   },
   cashActive: { backgroundColor: '#10B981' },
   creditActive: { backgroundColor: '#F59E0B' },
@@ -1620,69 +1578,47 @@ const styles = StyleSheet.create({
     color: '#FFF',
     marginLeft: 6,
     fontWeight: '600',
-    fontSize: 12,
+    fontSize: 13,
   },
   selectedCustomerInfo: {
     backgroundColor: '#EFF6FF',
-    padding: 12,
-    borderRadius: 8,
-    marginTop: 8,
+    padding: 14,
+    borderRadius: 12,
+    marginTop: 12,
     borderWidth: 2,
-    borderColor: '#2563EB',
+    borderColor: '#3B82F6',
   },
   selectedCustomerLabel: {
     fontSize: 12,
-    color: '#2563EB',
-    fontWeight: '600',
+    color: '#3B82F6',
+    fontWeight: '700',
     marginBottom: 8,
   },
-  customerDetailRow: {
-    flexDirection: 'column',
-    gap: 8,
-  },
-  detailItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  detailText: {
-    fontSize: 14,
-    color: '#1E40AF',
-    fontWeight: '500',
-    flex: 1,
-  },
+  customerDetailRow: { flexDirection: 'column', gap: 8 },
+  detailItem: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  detailText: { fontSize: 14, color: '#1E40AF', fontWeight: '500', flex: 1 },
   purchaseStats: {
     marginTop: 8,
     paddingTop: 8,
     borderTopWidth: 1,
     borderTopColor: '#DBEAFE',
   },
-  purchaseStatsText: {
-    fontSize: 12,
-    color: '#059669',
-    fontWeight: '500',
-  },
+  purchaseStatsText: { fontSize: 12, color: '#059669', fontWeight: '600' },
   statusBanner: {
     backgroundColor: '#FEF3C7',
     padding: 12,
-    borderRadius: 8,
-    marginBottom: 8,
+    borderRadius: 12,
+    marginBottom: 12,
   },
-  errorBanner: {
-    backgroundColor: '#FEE2E2',
-  },
-  statusText: {
-    fontSize: 12,
-    color: '#92400E',
-    textAlign: 'center',
-  },
+  errorBanner: { backgroundColor: '#FEE2E2' },
+  statusText: { fontSize: 12, color: '#92400E', textAlign: 'center' },
   customerDropdown: {
     backgroundColor: '#FFF',
-    borderRadius: 8,
-    marginTop: 4,
+    borderRadius: 12,
+    marginTop: 8,
     maxHeight: 200,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: '#E2E8F0',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
@@ -1690,15 +1626,13 @@ const styles = StyleSheet.create({
     elevation: 3,
     zIndex: 1001,
   },
-  customerList: {
-    maxHeight: 200,
-  },
+  customerList: { maxHeight: 200 },
   customerItem: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     padding: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
+    borderBottomColor: '#F1F5F9',
   },
   customerIcon: {
     width: 32,
@@ -1710,13 +1644,11 @@ const styles = StyleSheet.create({
     marginRight: 12,
     marginTop: 2,
   },
-  customerInfo: {
-    flex: 1,
-  },
+  customerInfo: { flex: 1 },
   customerName: {
     fontSize: 14,
-    fontWeight: '500',
-    color: '#111827',
+    fontWeight: '600',
+    color: '#0F172A',
     marginBottom: 4,
   },
   customerContactRow: {
@@ -1725,52 +1657,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 2,
   },
-  contactInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  customerPhone: {
-    fontSize: 12,
-    color: '#6B7280',
-  },
-  purchaseInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: '#D1FAE5',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-  },
-  purchaseText: {
-    fontSize: 10,
-    color: '#059669',
-    fontWeight: '600',
-  },
+  contactInfo: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  customerPhone: { fontSize: 12, color: '#64748B' },
   customerAddressRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 4,
     marginTop: 2,
   },
-  customerAddress: {
-    fontSize: 11,
-    color: '#6B7280',
-    flex: 1,
-    lineHeight: 14,
-  },
+  customerAddress: { fontSize: 11, color: '#64748B', flex: 1, lineHeight: 14 },
   lastPurchaseRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
     marginTop: 2,
   },
-  lastPurchaseText: {
-    fontSize: 10,
-    color: '#6B7280',
-    fontStyle: 'italic',
-  },
+  lastPurchaseText: { fontSize: 10, color: '#64748B', fontStyle: 'italic' },
   newCustomerItem: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1787,41 +1689,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginRight: 12,
   },
-  newCustomerInfo: {
-    flex: 1,
-  },
-  newCustomerText: {
-    fontSize: 14,
-    color: '#059669',
-    fontWeight: '500',
-  },
-  newCustomerSubtext: {
-    fontSize: 11,
-    color: '#6B7280',
-    marginTop: 2,
-  },
-  loadingContainer: {
-    padding: 16,
-    alignItems: 'center',
-  },
-  loadingText: {
-    fontSize: 14,
-    color: '#6B7280',
-  },
-  noCustomersContainer: {
-    padding: 16,
-    alignItems: 'center',
-  },
-  noCustomersText: {
-    fontSize: 14,
-    color: '#6B7280',
-    fontWeight: '500',
-  },
-  noCustomersSubtext: {
-    fontSize: 12,
-    color: '#9CA3AF',
-    marginTop: 4,
-  },
+  newCustomerInfo: { flex: 1 },
+  newCustomerText: { fontSize: 14, color: '#059669', fontWeight: '500' },
+  newCustomerSubtext: { fontSize: 11, color: '#64748B', marginTop: 2 },
+  loadingContainer: { padding: 16, alignItems: 'center' },
+  loadingText: { fontSize: 14, color: '#64748B' },
+  noCustomersContainer: { padding: 16, alignItems: 'center' },
+  noCustomersText: { fontSize: 14, color: '#64748B', fontWeight: '500' },
+  noCustomersSubtext: { fontSize: 12, color: '#94A3B8', marginTop: 4 },
   emptyState: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -1830,78 +1705,78 @@ const styles = StyleSheet.create({
   emptyStateText: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#6B7280',
+    color: '#64748B',
     marginBottom: 8,
   },
-  emptyStateSubtext: {
-    fontSize: 14,
-    color: '#9CA3AF',
-    textAlign: 'center',
-  },
+  emptyStateSubtext: { fontSize: 14, color: '#94A3B8', textAlign: 'center' },
   datePicker: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#FFF',
     padding: 12,
-    borderRadius: 8,
+    borderRadius: 12,
     marginTop: 8,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
   },
   dateIcon: {
     width: 40,
     height: 40,
-    borderRadius: 8,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
   },
   dateTextContainer: { flex: 1 },
-  dateLabel: { fontSize: 12, color: '#6B7280' },
-  dateText: { fontSize: 14, fontWeight: '500', color: '#111827' },
+  dateLabel: { fontSize: 11, color: '#64748B', fontWeight: '500' },
+  dateText: { fontSize: 14, fontWeight: '600', color: '#0F172A' },
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#FFF',
-    borderRadius: 8,
+    borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 8,
     marginTop: 8,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
   },
-  searchInput: { flex: 1, marginLeft: 8, height: 40, color: '#111827' },
+  searchInput: { flex: 1, marginLeft: 8, height: 40, color: '#0F172A' },
   categoryScroll: { flexDirection: 'row', gap: 8, marginTop: 8 },
   categoryBadge: {
-    backgroundColor: '#E5E7EB',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
+    backgroundColor: '#F1F5F9',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
     marginRight: 8,
   },
-  categorySelected: { backgroundColor: '#2563EB' },
-  categoryText: { color: '#374151', fontWeight: '500' },
+  categorySelected: { backgroundColor: '#3B82F6' },
+  categoryText: { color: '#475569', fontWeight: '500', fontSize: 13 },
   categoryTextSelected: { color: '#FFF' },
   productCard: {
     flexDirection: 'row',
     backgroundColor: '#FFF',
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 8,
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
+    shadowColor: '#94A3B8',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
   },
   productInfo: { flex: 1 },
-  productName: { fontSize: 14, fontWeight: '600', color: '#111827' },
+  productName: { fontSize: 15, fontWeight: '700', color: '#0F172A' },
   categoryStockRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginTop: 4,
   },
-  productCategory: {
-    fontSize: 12,
-    color: '#6B7280',
-  },
-  productStock: {
-    fontSize: 12,
-    color: '#6B7280',
-    marginRight: 60,
-  },
+  productCategory: { fontSize: 11, color: '#64748B' },
+  productStock: { fontSize: 11, color: '#64748B', marginRight: 60 },
   priceContainer: {
     flexDirection: 'row',
     marginTop: 8,
@@ -1909,17 +1784,15 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
   },
   priceColumn: {},
-  priceLabel: { fontSize: 10, color: '#6B7280', marginBottom: 4 },
-  productMrp: { fontSize: 12, fontWeight: '600', color: '#111827' },
-  purchasePriceInfo: {
-    marginTop: 4,
-    paddingTop: 2,
-  },
-  purchasePriceLabel: {
+  priceLabel: {
     fontSize: 10,
-    color: '#059669',
+    color: '#64748B',
+    marginBottom: 4,
     fontWeight: '500',
   },
+  productMrp: { fontSize: 12, fontWeight: '600', color: '#0F172A' },
+  purchasePriceInfo: { marginTop: 4, paddingTop: 2 },
+  purchasePriceLabel: { fontSize: 10, color: '#10B981', fontWeight: '600' },
   quantityContainer: { width: 100, alignItems: 'center' },
   quantityControls: {
     flexDirection: 'row',
@@ -1931,53 +1804,47 @@ const styles = StyleSheet.create({
   quantityButton: {
     width: 32,
     height: 32,
-    backgroundColor: '#2563EB',
-    borderRadius: 6,
+    backgroundColor: '#3B82F6',
+    borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  quantityButtonText: {
-    color: '#FFF',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  qtyInputContainer: {
-    width: 50,
-    height: 32,
-  },
+  quantityButtonText: { color: '#FFF', fontSize: 16, fontWeight: 'bold' },
+  qtyInputContainer: { width: 50, height: 32 },
   qtyInput: {
     width: '100%',
     height: '100%',
     borderWidth: 1,
-    borderColor: '#D1D5DB',
-    borderRadius: 6,
+    borderColor: '#E2E8F0',
+    borderRadius: 8,
     textAlign: 'center',
-    color: '#111827',
+    color: '#0F172A',
     backgroundColor: '#FFF',
     fontSize: 14,
     fontWeight: '500',
     padding: 0,
   },
   qtyInputActive: {
-    borderColor: '#2563EB',
+    borderColor: '#3B82F6',
     fontWeight: '600',
     backgroundColor: '#EFF6FF',
   },
   qtyLabel: {
     fontSize: 10,
-    color: '#6B7280',
+    color: '#64748B',
     marginTop: 4,
     textAlign: 'center',
+    fontWeight: '500',
   },
   discountInput: {
     borderWidth: 1,
-    borderColor: '#D1D5DB',
-    borderRadius: 4,
+    borderColor: '#E2E8F0',
+    borderRadius: 8,
     paddingHorizontal: 8,
     paddingVertical: 4,
     fontSize: 12,
     fontWeight: '500',
-    color: '#111827',
+    color: '#0F172A',
     minWidth: 50,
     textAlign: 'center',
     backgroundColor: '#FFF',
@@ -1990,30 +1857,30 @@ const styles = StyleSheet.create({
   },
   rateInput: {
     borderWidth: 1,
-    borderColor: '#D1D5DB',
-    borderRadius: 4,
+    borderColor: '#E2E8F0',
+    borderRadius: 8,
     paddingHorizontal: 8,
     paddingVertical: 4,
     fontSize: 12,
     fontWeight: '600',
-    color: '#111827',
+    color: '#0F172A',
     minWidth: 70,
     textAlign: 'center',
     backgroundColor: '#FFF',
   },
   rateInputModified: {
-    borderColor: '#2563EB',
+    borderColor: '#3B82F6',
     backgroundColor: '#EFF6FF',
     fontWeight: '700',
     color: '#1E40AF',
   },
   billDiscountSection: {
     backgroundColor: '#FFF',
-    padding: 12,
-    borderRadius: 8,
+    padding: 14,
+    borderRadius: 12,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: '#E2E8F0',
   },
   billDiscountHeader: {
     flexDirection: 'row',
@@ -2021,78 +1888,67 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 8,
   },
-  billDiscountTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#111827',
-  },
+  billDiscountTitle: { fontSize: 14, fontWeight: '600', color: '#0F172A' },
   applyAllButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#10B981',
+    backgroundColor: '#3B82F6',
     paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 6,
+    borderRadius: 8,
     gap: 4,
   },
-  applyAllText: {
-    color: '#FFF',
-    fontSize: 12,
-    fontWeight: '600',
-  },
+  applyAllText: { color: '#FFF', fontSize: 12, fontWeight: '600' },
   billDiscountInputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F9FAFB',
-    borderRadius: 6,
+    backgroundColor: '#F8FAFC',
+    borderRadius: 8,
     paddingHorizontal: 12,
     borderWidth: 1,
-    borderColor: '#D1D5DB',
+    borderColor: '#E2E8F0',
   },
   billDiscountInput: {
     flex: 1,
     height: 40,
-    color: '#111827',
+    color: '#0F172A',
     fontSize: 14,
     fontWeight: '500',
   },
   percentSymbol: {
     fontSize: 14,
-    color: '#6B7280',
+    color: '#64748B',
     fontWeight: '500',
     marginLeft: 4,
   },
   emptyCart: { alignItems: 'center', marginTop: 24 },
   emptyCartIcon: { marginBottom: 12 },
-  emptyCartText: { fontSize: 16, fontWeight: '600', color: '#6B7280' },
-  emptyCartSubtext: { fontSize: 12, color: '#9CA3AF' },
+  emptyCartText: { fontSize: 16, fontWeight: '600', color: '#64748B' },
+  emptyCartSubtext: { fontSize: 12, color: '#94A3B8' },
   cartItem: {
     flexDirection: 'row',
     backgroundColor: '#FFF',
-    borderRadius: 8,
+    borderRadius: 12,
     padding: 12,
     marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
   },
   cartItemInfo: { flex: 1 },
   cartItemName: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#111827',
+    color: '#0F172A',
     marginBottom: 8,
   },
-  cartItemDetails: {
-    marginBottom: 8,
-  },
+  cartItemDetails: { marginBottom: 8 },
   cartPriceRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 4,
   },
-  cartBasePrice: {
-    fontSize: 12,
-    color: '#6B7280',
-  },
+  cartBasePrice: { fontSize: 12, color: '#64748B' },
   discountBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2102,26 +1958,14 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     gap: 4,
   },
-  discountBadgeText: {
-    color: '#FFF',
-    fontSize: 10,
-    fontWeight: '600',
-  },
+  discountBadgeText: { color: '#FFF', fontSize: 10, fontWeight: '600' },
   discountRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  discountText: {
-    fontSize: 11,
-    color: '#EF4444',
-    fontWeight: '600',
-  },
-  finalPriceText: {
-    fontSize: 11,
-    color: '#059669',
-    fontWeight: '600',
-  },
+  discountText: { fontSize: 11, color: '#EF4444', fontWeight: '600' },
+  finalPriceText: { fontSize: 11, color: '#10B981', fontWeight: '600' },
   profitRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -2129,78 +1973,48 @@ const styles = StyleSheet.create({
     marginTop: 4,
     paddingTop: 4,
     borderTopWidth: 1,
-    borderTopColor: '#F3F4F6',
+    borderTopColor: '#F1F5F9',
   },
-  profitLabel: {
-    fontSize: 11,
-    color: '#6B7280',
-  },
-  profitValue: {
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  profitPositive: {
-    color: '#059669',
-  },
-  profitNegative: {
-    color: '#EF4444',
-  },
+  profitLabel: { fontSize: 11, color: '#64748B' },
+  profitValue: { fontSize: 11, fontWeight: '600' },
+  profitPositive: { color: '#10B981' },
+  profitNegative: { color: '#EF4444' },
   cartItemRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  cartQuantityContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  cartQuantityLabel: {
-    fontSize: 12,
-    color: '#6B7280',
-  },
-  cartQuantityControls: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
+  cartQuantityContainer: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  cartQuantityLabel: { fontSize: 12, color: '#64748B' },
+  cartQuantityControls: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   cartQuantityButton: {
     width: 28,
     height: 28,
-    backgroundColor: '#2563EB',
-    borderRadius: 4,
+    backgroundColor: '#3B82F6',
+    borderRadius: 6,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  cartQuantityButtonText: {
-    color: '#FFF',
-    fontSize: 14,
-    fontWeight: 'bold',
-  },
-  cartQtyInputContainer: {
-    width: 40,
-    height: 28,
-  },
+  cartQuantityButtonText: { color: '#FFF', fontSize: 14, fontWeight: 'bold' },
+  cartQtyInputContainer: { width: 40, height: 28 },
   cartQtyInput: {
     width: '100%',
     height: '100%',
     borderWidth: 1,
-    borderColor: '#D1D5DB',
-    borderRadius: 4,
+    borderColor: '#E2E8F0',
+    borderRadius: 6,
     textAlign: 'center',
-    color: '#111827',
+    color: '#0F172A',
     backgroundColor: '#FFF',
     fontSize: 12,
     fontWeight: '500',
     padding: 0,
   },
-  cartTotalContainer: {
-    marginLeft: 16,
-  },
+  cartTotalContainer: { marginLeft: 16 },
   cartItemTotal: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#111827',
+    color: '#0F172A',
     minWidth: 60,
     textAlign: 'right',
   },
@@ -2208,7 +2022,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#EF4444',
     width: 32,
     height: 32,
-    borderRadius: 6,
+    borderRadius: 8,
     justifyContent: 'center',
     alignItems: 'center',
     marginLeft: 8,
@@ -2216,7 +2030,7 @@ const styles = StyleSheet.create({
   priceSummary: {
     backgroundColor: '#F8FAFC',
     padding: 16,
-    borderRadius: 8,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: '#E2E8F0',
   },
@@ -2226,35 +2040,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 8,
   },
-  summaryLabel: {
-    fontSize: 14,
-    color: '#64748B',
-    fontWeight: '500',
-  },
-  summaryValue: {
-    fontSize: 14,
-    color: '#334155',
-    fontWeight: '600',
-  },
-  discountValue: {
-    color: '#EF4444',
-  },
+  summaryLabel: { fontSize: 14, color: '#64748B', fontWeight: '500' },
+  summaryValue: { fontSize: 14, color: '#334155', fontWeight: '600' },
+  discountValue: { color: '#EF4444' },
   finalTotalRow: {
     borderTopWidth: 1,
     borderTopColor: '#E2E8F0',
     paddingTop: 8,
     marginTop: 4,
   },
-  finalTotalLabel: {
-    fontSize: 16,
-    color: '#111827',
-    fontWeight: '700',
-  },
-  finalTotalValue: {
-    fontSize: 18,
-    color: '#111827',
-    fontWeight: '700',
-  },
+  finalTotalLabel: { fontSize: 16, color: '#0F172A', fontWeight: '700' },
+  finalTotalValue: { fontSize: 18, color: '#0F172A', fontWeight: '700' },
   profitSection: {
     marginTop: 12,
     paddingTop: 12,
@@ -2264,7 +2060,7 @@ const styles = StyleSheet.create({
   profitSectionTitle: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#059669',
+    color: '#10B981',
     marginBottom: 8,
     textAlign: 'center',
   },
@@ -2272,33 +2068,22 @@ const styles = StyleSheet.create({
     marginTop: 8,
     paddingTop: 8,
     borderTopWidth: 1,
-    borderTopColor: '#D1D5DB',
+    borderTopColor: '#E2E8F0',
   },
-  finalProfitLabel: {
-    fontSize: 15,
-    color: '#059669',
-    fontWeight: '800',
-  },
-  finalProfitValue: {
-    fontSize: 16,
-    color: '#059669',
-    fontWeight: '800',
-  },
-  cartTotal: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 12,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
-  },
-  cartTotalText: { fontSize: 16, fontWeight: '700', color: '#111827' },
+  finalProfitLabel: { fontSize: 15, color: '#10B981', fontWeight: '800' },
+  finalProfitValue: { fontSize: 16, color: '#10B981', fontWeight: '800' },
   generateBtn: {
-    backgroundColor: '#2563EB',
+    backgroundColor: '#3B82F6',
     paddingVertical: 16,
-    borderRadius: 8,
+    borderRadius: 14,
     marginVertical: 16,
     alignItems: 'center',
+    marginBottom: 40,
+    shadowColor: '#3B82F6',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    elevation: 4,
   },
   generateBtnText: { color: '#FFF', fontSize: 16, fontWeight: '700' },
 });

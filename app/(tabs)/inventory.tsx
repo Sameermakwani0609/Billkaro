@@ -2,6 +2,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import {
   ChevronDown,
   CreditCard as Edit,
+  Package,
   Plus,
   Search,
   Trash2,
@@ -11,6 +12,7 @@ import React, { useEffect, useState } from 'react';
 import {
   Alert,
   Modal,
+  Platform,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -319,7 +321,7 @@ export default function Inventory() {
                 setCategorySearchQuery('');
               }}
             >
-              <X size={24} color="#6B7280" />
+              <X size={24} color="#64748B" />
             </TouchableOpacity>
           </View>
 
@@ -328,13 +330,13 @@ export default function Inventory() {
             <View style={styles.categorySearchWrapper}>
               <Search
                 size={20}
-                color="#9CA3AF"
+                color="#94A3B8"
                 style={styles.categorySearchIcon}
               />
               <TextInput
                 style={styles.categorySearchInput}
                 placeholder="Search categories..."
-                placeholderTextColor="#9CA3AF"
+                placeholderTextColor="#94A3B8"
                 value={categorySearchQuery}
                 onChangeText={(text) => setCategorySearchQuery(text)}
                 autoFocus={true}
@@ -344,7 +346,7 @@ export default function Inventory() {
                   onPress={() => setCategorySearchQuery('')}
                   style={styles.clearButton}
                 >
-                  <X size={18} color="#9CA3AF" />
+                  <X size={18} color="#94A3B8" />
                 </TouchableOpacity>
               )}
             </View>
@@ -436,7 +438,7 @@ export default function Inventory() {
           <View style={styles.pickerModalHeader}>
             <Text style={styles.pickerModalTitle}>Select Unit</Text>
             <TouchableOpacity onPress={() => setShowUnitPicker(false)}>
-              <X size={24} color="#6B7280" />
+              <X size={24} color="#64748B" />
             </TouchableOpacity>
           </View>
 
@@ -475,26 +477,44 @@ export default function Inventory() {
 
   return (
     <View style={styles.container}>
-      <StatusBar backgroundColor="#0066CC" barStyle="light-content" />
+      <StatusBar backgroundColor="#0F172A" barStyle="light-content" />
 
-      {/* Header */}
-      <LinearGradient colors={['#0066CC', '#0052A3']} style={styles.header}>
-        <Text style={styles.headerTitle}>Inventory Management</Text>
-        <Text style={styles.headerSubtitle}>Manage your products</Text>
-        <Text style={styles.headerSubtitle}>
-          Total Products: {products.length}
-        </Text>
+      {/* Header with Dashboard Theme - Improved Design */}
+      <LinearGradient
+        colors={['#0F172A', '#1E3A8A', '#1D4ED8']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.header}
+      >
+        <View style={styles.headerTop}>
+          <View style={styles.headerIconContainer}>
+            <Package size={28} color="#FFFFFF" />
+          </View>
+          <Text style={styles.headerTitle}>Inventory</Text>
+        </View>
+
+        <View style={styles.headerStats}>
+          <View style={styles.statItem}>
+            <Text style={styles.statValue}>{products.length}</Text>
+            <Text style={styles.statLabel}>Total Products</Text>
+          </View>
+          <View style={styles.statDivider} />
+          <View style={styles.statItem}>
+            <Text style={styles.statValue}>{lowStockItems.length}</Text>
+            <Text style={styles.statLabel}>Low Stock</Text>
+          </View>
+        </View>
       </LinearGradient>
 
       <View style={styles.content}>
         {/* Search and Add */}
         <View style={styles.topSection}>
           <View style={styles.searchContainer}>
-            <Search size={20} color="#6B7280" style={styles.searchIcon} />
+            <Search size={20} color="#64748B" style={styles.searchIcon} />
             <TextInput
               style={styles.searchInput}
               placeholder="Search products..."
-              placeholderTextColor="#9CA3AF"
+              placeholderTextColor="#94A3B8"
               value={searchQuery}
               onChangeText={setSearchQuery}
             />
@@ -504,7 +524,7 @@ export default function Inventory() {
             onPress={() => openModal()}
           >
             <LinearGradient
-              colors={['#138808', '#0F6605']}
+              colors={['#3B82F6', '#1D4ED8']}
               style={styles.addButtonGradient}
             >
               <Plus size={20} color="#FFFFFF" />
@@ -523,16 +543,6 @@ export default function Inventory() {
           </View>
         )}
 
-        {/* Low Stock Alert */}
-        {lowStockItems.length > 0 && (
-          <View style={styles.alertCard}>
-            <Text style={styles.alertTitle}>⚠️ Low Stock Alert</Text>
-            <Text style={styles.alertText}>
-              {lowStockItems.length} item(s) running low on stock
-            </Text>
-          </View>
-        )}
-
         {/* Products List */}
         <ScrollView
           style={styles.productsList}
@@ -540,69 +550,94 @@ export default function Inventory() {
         >
           {filteredProducts.length === 0 ? (
             <View style={styles.emptyState}>
+              <Package size={64} color="#94A3B8" />
               <Text style={styles.emptyStateText}>
                 {searchQuery ? 'No products found' : 'No products available'}
               </Text>
               <Text style={styles.emptyStateSubtext}>
                 {searchQuery
                   ? 'Try a different search term'
-                  : 'Add your first product to get started'}
+                  : 'Tap the + button to add your first product'}
               </Text>
             </View>
           ) : (
-            filteredProducts.map((product) => (
-              <View
-                key={product.id}
-                style={[
-                  styles.productCard,
-                  product.stock <= product.minStock && styles.lowStockCard,
-                ]}
-              >
-                <View style={styles.productInfo}>
-                  <View style={styles.productHeader}>
-                    <Text style={styles.productName}>{product.name}</Text>
-                    {product.categoryName && (
-                      <Text style={styles.productCategory}>
-                        {product.categoryName}
-                      </Text>
-                    )}
-                  </View>
-                  <View style={styles.productDetails}>
-                    <Text style={styles.normalMrpText}>
-                      MRP: ₹{product.mrp}
-                    </Text>
-                    <Text
-                      style={[
-                        styles.sellPriceText,
-                        product.sellPrice < product.purchasePrice && {
-                          color: '#EF4444',
-                        },
-                      ]}
-                    >
-                      Rate: ₹{product.sellPrice}
-                    </Text>
-                    <Text style={styles.stockText}>
-                      Stock: {product.stock} {product.unit}
-                    </Text>
-                  </View>
-                </View>
-
-                <View style={styles.actionButtons}>
-                  <TouchableOpacity
-                    style={styles.editButton}
-                    onPress={() => openModal(product)}
-                  >
-                    <Edit size={16} color="#0066CC" />
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.deleteButton}
-                    onPress={() => deleteProductHandler(product.id)}
-                  >
-                    <Trash2 size={16} color="#EF4444" />
-                  </TouchableOpacity>
-                </View>
+            <>
+              {/* Results Count */}
+              <View style={styles.resultsCount}>
+                <Text style={styles.resultsCountText}>
+                  Showing {filteredProducts.length} of {products.length}{' '}
+                  products
+                </Text>
               </View>
-            ))
+
+              {filteredProducts.map((product) => (
+                <View
+                  key={product.id}
+                  style={[
+                    styles.productCard,
+                    product.stock <= product.minStock && styles.lowStockCard,
+                  ]}
+                >
+                  <View style={styles.productInfo}>
+                    <View style={styles.productHeader}>
+                      <Text style={styles.productName}>{product.name}</Text>
+                      {product.categoryName && (
+                        <Text style={styles.productCategory}>
+                          {product.categoryName}
+                        </Text>
+                      )}
+                    </View>
+                    <View style={styles.productDetails}>
+                      <View style={styles.detailItem}>
+                        <Text style={styles.detailLabel}>MRP:</Text>
+                        <Text style={styles.detailValue}>₹{product.mrp}</Text>
+                      </View>
+                      <View style={styles.detailItem}>
+                        <Text style={styles.detailLabel}>Rate:</Text>
+                        <Text
+                          style={[
+                            styles.detailValue,
+                            styles.sellPriceText,
+                            product.sellPrice < product.purchasePrice && {
+                              color: '#EF4444',
+                            },
+                          ]}
+                        >
+                          ₹{product.sellPrice}
+                        </Text>
+                      </View>
+                      <View style={styles.detailItem}>
+                        <Text style={styles.detailLabel}>Stock:</Text>
+                        <Text
+                          style={[
+                            styles.detailValue,
+                            product.stock <= product.minStock &&
+                              styles.lowStockText,
+                          ]}
+                        >
+                          {product.stock} {product.unit}
+                        </Text>
+                      </View>
+                    </View>
+                  </View>
+
+                  <View style={styles.actionButtons}>
+                    <TouchableOpacity
+                      style={styles.editButton}
+                      onPress={() => openModal(product)}
+                    >
+                      <Edit size={16} color="#3B82F6" />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.deleteButton}
+                      onPress={() => deleteProductHandler(product.id)}
+                    >
+                      <Trash2 size={16} color="#EF4444" />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ))}
+            </>
           )}
         </ScrollView>
       </View>
@@ -621,7 +656,7 @@ export default function Inventory() {
                 {editingProduct ? 'Edit Product' : 'Add New Product'}
               </Text>
               <TouchableOpacity onPress={closeModal}>
-                <X size={24} color="#6B7280" />
+                <X size={24} color="#64748B" />
               </TouchableOpacity>
             </View>
 
@@ -638,7 +673,7 @@ export default function Inventory() {
                     setFormData({ ...formData, name: text })
                   }
                   placeholder="Enter product name"
-                  placeholderTextColor="#9CA3AF"
+                  placeholderTextColor="#94A3B8"
                 />
               </View>
 
@@ -651,7 +686,7 @@ export default function Inventory() {
                     setFormData({ ...formData, mrp: text })
                   }
                   placeholder="Enter MRP"
-                  placeholderTextColor="#9CA3AF"
+                  placeholderTextColor="#94A3B8"
                   keyboardType="numeric"
                 />
               </View>
@@ -665,7 +700,7 @@ export default function Inventory() {
                     setFormData({ ...formData, purchasePrice: text })
                   }
                   placeholder="Enter purchase price"
-                  placeholderTextColor="#9CA3AF"
+                  placeholderTextColor="#94A3B8"
                   keyboardType="numeric"
                 />
               </View>
@@ -679,7 +714,7 @@ export default function Inventory() {
                     setFormData({ ...formData, sellPrice: text })
                   }
                   placeholder="Enter sell price"
-                  placeholderTextColor="#9CA3AF"
+                  placeholderTextColor="#94A3B8"
                   keyboardType="numeric"
                 />
               </View>
@@ -693,7 +728,7 @@ export default function Inventory() {
                     setFormData({ ...formData, stock: text })
                   }
                   placeholder="Enter stock quantity"
-                  placeholderTextColor="#9CA3AF"
+                  placeholderTextColor="#94A3B8"
                   keyboardType="numeric"
                 />
               </View>
@@ -708,7 +743,7 @@ export default function Inventory() {
                     <Text style={styles.pickerButtonText}>
                       {getSelectedUnitLabel()}
                     </Text>
-                    <ChevronDown size={20} color="#6B7280" />
+                    <ChevronDown size={20} color="#64748B" />
                   </View>
                 </TouchableOpacity>
               </View>
@@ -727,7 +762,7 @@ export default function Inventory() {
                     <Text style={styles.pickerButtonText}>
                       {getSelectedCategoryName()}
                     </Text>
-                    <ChevronDown size={20} color="#6B7280" />
+                    <ChevronDown size={20} color="#64748B" />
                   </View>
                 </TouchableOpacity>
               </View>
@@ -741,7 +776,7 @@ export default function Inventory() {
                     setFormData({ ...formData, minStock: text })
                   }
                   placeholder="Enter minimum stock level"
-                  placeholderTextColor="#9CA3AF"
+                  placeholderTextColor="#94A3B8"
                   keyboardType="numeric"
                 />
               </View>
@@ -756,7 +791,7 @@ export default function Inventory() {
               </TouchableOpacity>
               <TouchableOpacity style={styles.saveButton} onPress={saveProduct}>
                 <LinearGradient
-                  colors={['#138808', '#0F6605']}
+                  colors={['#3B82F6', '#1D4ED8']}
                   style={styles.saveButtonGradient}
                 >
                   <Text style={styles.saveButtonText}>
@@ -779,70 +814,129 @@ export default function Inventory() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F8FAFC' },
+  container: { flex: 1, backgroundColor: '#F1F5F9' },
   header: {
-    paddingTop: 50,
+    paddingTop: Platform.OS === 'ios' ? 58 : 44,
     paddingBottom: 20,
-    paddingHorizontal: 20,
+    paddingHorizontal: 24,
+    borderBottomLeftRadius: 32,
+    borderBottomRightRadius: 32,
+    elevation: 12,
+    shadowColor: '#1E3A8A',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.35,
+    shadowRadius: 20,
+  },
+  headerTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  headerIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  headerTitle: {
+    fontSize: 28,
+    fontWeight: '900',
+    color: '#FFFFFF',
+    letterSpacing: 1,
+  },
+  headerStats: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-around',
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+  },
+  statItem: {
+    flex: 1,
     alignItems: 'center',
   },
-  headerTitle: { fontSize: 24, fontWeight: 'bold', color: '#FFFFFF' },
-  headerSubtitle: {
-    fontSize: 14,
+  statValue: {
+    fontSize: 24,
+    fontWeight: '800',
     color: '#FFFFFF',
-    opacity: 0.9,
-    marginTop: 4,
+    marginBottom: 4,
   },
-  content: { flex: 1, paddingHorizontal: 20 },
+  statLabel: {
+    fontSize: 12,
+    color: '#93C5FD',
+    fontWeight: '500',
+  },
+  statDivider: {
+    width: 1,
+    height: 30,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+  },
+  content: { flex: 1, paddingHorizontal: 20, paddingTop: 20 },
   topSection: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginVertical: 20,
-    gap: 15,
+    marginBottom: 20,
+    gap: 12,
   },
   searchContainer: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
-    borderRadius: 12,
+    borderRadius: 14,
     paddingHorizontal: 15,
-    elevation: 3,
-    shadowColor: '#000',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    shadowColor: '#94A3B8',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.05,
     shadowRadius: 4,
+    elevation: 2,
   },
   searchIcon: { marginRight: 10 },
-  searchInput: { flex: 1, height: 50, fontSize: 16, color: '#1F2937' },
-  addButton: { borderRadius: 12, overflow: 'hidden' },
+  searchInput: { flex: 1, height: 48, fontSize: 16, color: '#0F172A' },
+  addButton: { borderRadius: 14, overflow: 'hidden' },
   addButtonGradient: {
-    width: 50,
-    height: 50,
+    width: 48,
+    height: 48,
     justifyContent: 'center',
     alignItems: 'center',
+    shadowColor: '#3B82F6',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 4,
   },
   errorCard: {
-    backgroundColor: '#FEE2E2',
-    borderRadius: 12,
-    padding: 15,
+    backgroundColor: '#FEF2F2',
+    borderRadius: 16,
+    padding: 16,
     marginBottom: 20,
     borderLeftWidth: 4,
     borderLeftColor: '#EF4444',
   },
-  errorTitle: { fontSize: 16, fontWeight: 'bold', color: '#DC2626' },
-  errorText: { fontSize: 14, color: '#DC2626' },
-  alertCard: {
-    backgroundColor: '#FEF3C7',
-    borderRadius: 12,
-    padding: 15,
-    marginBottom: 20,
-    borderLeftWidth: 4,
-    borderLeftColor: '#F59E0B',
+  errorTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#DC2626',
+    marginBottom: 4,
   },
-  alertTitle: { fontSize: 16, fontWeight: 'bold', color: '#92400E' },
-  alertText: { fontSize: 14, color: '#92400E' },
+  errorText: { fontSize: 14, color: '#DC2626' },
   productsList: { flex: 1 },
+  resultsCount: {
+    marginBottom: 12,
+    paddingHorizontal: 4,
+  },
+  resultsCountText: {
+    fontSize: 12,
+    color: '#64748B',
+    fontWeight: '500',
+  },
   emptyState: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -850,28 +944,31 @@ const styles = StyleSheet.create({
   },
   emptyStateText: {
     fontSize: 18,
-    fontWeight: '600',
-    color: '#6B7280',
+    fontWeight: '700',
+    color: '#64748B',
+    marginTop: 16,
     marginBottom: 8,
   },
   emptyStateSubtext: {
     fontSize: 14,
-    color: '#9CA3AF',
+    color: '#94A3B8',
     textAlign: 'center',
   },
   productCard: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 15,
+    borderRadius: 16,
+    padding: 16,
     marginBottom: 12,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    elevation: 3,
-    shadowColor: '#000',
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
+    shadowColor: '#94A3B8',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.05,
     shadowRadius: 4,
+    elevation: 2,
   },
   lowStockCard: {
     borderLeftWidth: 4,
@@ -879,34 +976,64 @@ const styles = StyleSheet.create({
     backgroundColor: '#FEF2F2',
   },
   productInfo: { flex: 1 },
-  productHeader: { marginBottom: 8 },
-  productName: { fontSize: 16, fontWeight: '600', color: '#1F2937' },
+  productHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  productName: { fontSize: 16, fontWeight: '700', color: '#0F172A', flex: 1 },
   productCategory: {
-    fontSize: 12,
-    color: '#6B7280',
-    backgroundColor: '#F3F4F6',
+    fontSize: 11,
+    color: '#3B82F6',
+    backgroundColor: '#EFF6FF',
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 6,
-    alignSelf: 'flex-start',
-    marginTop: 4,
+    fontWeight: '600',
   },
-  productDetails: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  normalMrpText: { fontSize: 14, color: '#6B7280' },
-  sellPriceText: { fontSize: 18, fontWeight: 'bold', color: '#FF9933' },
-  stockText: { fontSize: 14, color: '#6B7280' },
-  actionButtons: { flexDirection: 'row', gap: 10 },
+  productDetails: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+    flexWrap: 'wrap',
+  },
+  detailItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  detailLabel: {
+    fontSize: 12,
+    color: '#64748B',
+    fontWeight: '500',
+  },
+  detailValue: {
+    fontSize: 13,
+    color: '#334155',
+    fontWeight: '600',
+  },
+  sellPriceText: {
+    color: '#3B82F6',
+    fontWeight: '700',
+  },
+  lowStockText: {
+    color: '#EF4444',
+  },
+  actionButtons: { flexDirection: 'row', gap: 8, marginLeft: 12 },
   editButton: {
-    backgroundColor: '#DBEAFE',
-    borderRadius: 8,
+    backgroundColor: '#EFF6FF',
+    borderRadius: 10,
     width: 36,
     height: 36,
     justifyContent: 'center',
     alignItems: 'center',
   },
   deleteButton: {
-    backgroundColor: '#FEE2E2',
-    borderRadius: 8,
+    backgroundColor: '#FEF2F2',
+    borderRadius: 10,
     width: 36,
     height: 36,
     justifyContent: 'center',
@@ -920,10 +1047,10 @@ const styles = StyleSheet.create({
   },
   modalContent: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 20,
+    borderRadius: 24,
+    padding: 24,
     width: '90%',
-    maxHeight: '80%',
+    maxHeight: '85%',
   },
   modalHeader: {
     flexDirection: 'row',
@@ -931,31 +1058,37 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 20,
   },
-  modalTitle: { fontSize: 20, fontWeight: 'bold', color: '#1F2937' },
-  formContainer: { maxHeight: 400 },
-  inputGroup: { marginBottom: 20 },
+  modalTitle: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: '#0F172A',
+    letterSpacing: 0.3,
+  },
+  formContainer: { maxHeight: 450 },
+  inputGroup: { marginBottom: 18 },
   inputLabel: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '600',
-    color: '#1F2937',
+    color: '#475569',
     marginBottom: 8,
+    letterSpacing: 0.3,
   },
   textInput: {
-    borderWidth: 1,
-    borderColor: '#D1D5DB',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 16,
-    color: '#1F2937',
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 15,
+    color: '#0F172A',
     backgroundColor: '#FFFFFF',
   },
   pickerButton: {
-    borderWidth: 1,
-    borderColor: '#D1D5DB',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
     backgroundColor: '#FFFFFF',
   },
   pickerButtonContent: {
@@ -964,8 +1097,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   pickerButtonText: {
-    fontSize: 16,
-    color: '#1F2937',
+    fontSize: 15,
+    color: '#0F172A',
   },
   pickerModalOverlay: {
     flex: 1,
@@ -975,7 +1108,7 @@ const styles = StyleSheet.create({
   },
   pickerModalContent: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 12,
+    borderRadius: 24,
     width: '90%',
     maxHeight: '80%',
     padding: 20,
@@ -987,12 +1120,12 @@ const styles = StyleSheet.create({
     marginBottom: 15,
     paddingBottom: 10,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: '#F1F5F9',
   },
   pickerModalTitle: {
     fontSize: 18,
-    fontWeight: 'bold',
-    color: '#1F2937',
+    fontWeight: '700',
+    color: '#0F172A',
   },
   categorySearchContainer: {
     marginBottom: 15,
@@ -1000,11 +1133,11 @@ const styles = StyleSheet.create({
   categorySearchWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F3F4F6',
-    borderRadius: 8,
+    backgroundColor: '#F8FAFC',
+    borderRadius: 12,
     paddingHorizontal: 12,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: '#E2E8F0',
   },
   categorySearchIcon: {
     marginRight: 10,
@@ -1012,8 +1145,8 @@ const styles = StyleSheet.create({
   categorySearchInput: {
     flex: 1,
     height: 45,
-    fontSize: 16,
-    color: '#1F2937',
+    fontSize: 15,
+    color: '#0F172A',
   },
   clearButton: {
     padding: 5,
@@ -1025,18 +1158,18 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     paddingHorizontal: 10,
     borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
+    borderBottomColor: '#F1F5F9',
   },
   pickerItemSelected: {
-    backgroundColor: '#DBEAFE',
-    borderRadius: 8,
+    backgroundColor: '#EFF6FF',
+    borderRadius: 10,
   },
   pickerItemText: {
-    fontSize: 16,
-    color: '#374151',
+    fontSize: 15,
+    color: '#475569',
   },
   pickerItemTextSelected: {
-    color: '#0066CC',
+    color: '#3B82F6',
     fontWeight: '600',
   },
   emptyPickerState: {
@@ -1046,27 +1179,39 @@ const styles = StyleSheet.create({
   },
   emptyPickerText: {
     fontSize: 14,
-    color: '#9CA3AF',
+    color: '#94A3B8',
     textAlign: 'center',
   },
   modalButtons: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginTop: 20,
+    gap: 12,
   },
   cancelButton: {
-    backgroundColor: '#F3F4F6',
+    backgroundColor: '#F1F5F9',
     paddingVertical: 12,
     paddingHorizontal: 20,
-    borderRadius: 8,
+    borderRadius: 12,
+    flex: 1,
   },
-  cancelButtonText: { color: '#6B7280', fontSize: 16, fontWeight: '600' },
-  saveButton: { flex: 1, marginLeft: 10 },
+  cancelButtonText: {
+    color: '#64748B',
+    fontSize: 16,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  saveButton: { flex: 1 },
   saveButtonGradient: {
     paddingVertical: 12,
-    borderRadius: 8,
+    borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
+    shadowColor: '#3B82F6',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 4,
   },
-  saveButtonText: { color: '#FFFFFF', fontSize: 16, fontWeight: '600' },
+  saveButtonText: { color: '#FFFFFF', fontSize: 16, fontWeight: '700' },
 });

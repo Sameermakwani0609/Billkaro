@@ -7,6 +7,8 @@ import {
   Plus,
   Search,
   Trash2,
+  Truck,
+  Users,
   X,
 } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
@@ -14,6 +16,7 @@ import {
   Alert,
   FlatList,
   Modal,
+  Platform,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -56,7 +59,7 @@ export default function Customers() {
     null,
   );
   const [formData, setFormData] = useState({
-    id: 0, // Changed back to number
+    id: 0,
     name: '',
     phone: '',
     email: '',
@@ -148,7 +151,7 @@ export default function Customers() {
     } else {
       setEditingItem(null);
       setFormData({
-        id: 0, // Set to 0 for new items
+        id: 0,
         name: '',
         phone: '',
         email: '',
@@ -174,7 +177,6 @@ export default function Customers() {
     try {
       if (activeTab === 'customers') {
         if (editingItem && isCustomer(editingItem)) {
-          // Update existing customer
           await updateCustomer(
             editingItem.id,
             formData.name,
@@ -184,7 +186,6 @@ export default function Customers() {
           );
           Alert.alert('Success', 'Customer updated successfully');
         } else {
-          // Insert new customer - don't pass ID
           await insertCustomer(
             formData.name,
             formData.phone,
@@ -201,7 +202,6 @@ export default function Customers() {
         }
 
         if (editingItem && isSupplier(editingItem)) {
-          // Update existing supplier
           await updateSupplier(
             editingItem.id,
             formData.name,
@@ -213,7 +213,6 @@ export default function Customers() {
           );
           Alert.alert('Success', 'Supplier updated successfully');
         } else {
-          // Insert new supplier - don't pass ID
           await insertSupplier(
             formData.name,
             formData.phone,
@@ -235,7 +234,6 @@ export default function Customers() {
   };
 
   const deleteItem = async (id: number) => {
-    // Changed back to number
     Alert.alert(
       `Delete ${activeTab === 'customers' ? 'Customer' : 'Supplier'}`,
       `Are you sure you want to delete this ${activeTab === 'customers' ? 'customer' : 'supplier'}?`,
@@ -274,13 +272,18 @@ export default function Customers() {
     <View style={styles.itemCard}>
       <View style={styles.itemInfo}>
         <View style={styles.itemHeader}>
-          <Text style={styles.itemName}>{item.name}</Text>
+          <View style={styles.itemHeaderLeft}>
+            <View style={styles.avatar}>
+              <Users size={20} color="#3B82F6" />
+            </View>
+            <Text style={styles.itemName}>{item.name}</Text>
+          </View>
           <View style={styles.itemActions}>
             <TouchableOpacity
               style={styles.editButton}
               onPress={() => openModal(item)}
             >
-              <Edit size={16} color="#0066CC" />
+              <Edit size={16} color="#3B82F6" />
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.deleteButton}
@@ -292,20 +295,20 @@ export default function Customers() {
         </View>
 
         <View style={styles.itemDetail}>
-          <Phone size={14} color="#6B7280" />
+          <Phone size={14} color="#64748B" />
           <Text style={styles.itemDetailText}>{item.phone}</Text>
         </View>
 
         {item.email && (
           <View style={styles.itemDetail}>
-            <Mail size={14} color="#6B7280" />
+            <Mail size={14} color="#64748B" />
             <Text style={styles.itemDetailText}>{item.email}</Text>
           </View>
         )}
 
         {item.address && (
           <View style={styles.itemDetail}>
-            <MapPin size={14} color="#6B7280" />
+            <MapPin size={14} color="#64748B" />
             <Text style={styles.itemDetailText}>{item.address}</Text>
           </View>
         )}
@@ -328,16 +331,21 @@ export default function Customers() {
     <View style={styles.itemCard}>
       <View style={styles.itemInfo}>
         <View style={styles.itemHeader}>
-          <View>
-            <Text style={styles.itemName}>{item.name}</Text>
-            <Text style={styles.companyName}>{item.company}</Text>
+          <View style={styles.itemHeaderLeft}>
+            <View style={styles.avatar}>
+              <Truck size={20} color="#3B82F6" />
+            </View>
+            <View>
+              <Text style={styles.itemName}>{item.name}</Text>
+              <Text style={styles.companyName}>{item.company}</Text>
+            </View>
           </View>
           <View style={styles.itemActions}>
             <TouchableOpacity
               style={styles.editButton}
               onPress={() => openModal(item)}
             >
-              <Edit size={16} color="#0066CC" />
+              <Edit size={16} color="#3B82F6" />
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.deleteButton}
@@ -349,20 +357,20 @@ export default function Customers() {
         </View>
 
         <View style={styles.itemDetail}>
-          <Phone size={14} color="#6B7280" />
+          <Phone size={14} color="#64748B" />
           <Text style={styles.itemDetailText}>{item.phone}</Text>
         </View>
 
         {item.email && (
           <View style={styles.itemDetail}>
-            <Mail size={14} color="#6B7280" />
+            <Mail size={14} color="#64748B" />
             <Text style={styles.itemDetailText}>{item.email}</Text>
           </View>
         )}
 
         {item.address && (
           <View style={styles.itemDetail}>
-            <MapPin size={14} color="#6B7280" />
+            <MapPin size={14} color="#64748B" />
             <Text style={styles.itemDetailText}>{item.address}</Text>
           </View>
         )}
@@ -383,16 +391,38 @@ export default function Customers() {
 
   return (
     <View style={styles.container}>
-      <StatusBar backgroundColor="#8B5CF6" barStyle="light-content" />
+      <StatusBar backgroundColor="#0F172A" barStyle="light-content" />
 
-      {/* Header */}
-      <LinearGradient colors={['#8B5CF6', '#7C3AED']} style={styles.header}>
-        <Text style={styles.headerTitle}>
-          {activeTab === 'customers' ? 'Customers' : 'Suppliers'}
-        </Text>
-        <Text style={styles.headerSubtitle}>
-          Manage your {activeTab === 'customers' ? 'customers' : 'suppliers'}
-        </Text>
+      {/* Header with Dashboard Theme */}
+      <LinearGradient
+        colors={['#0F172A', '#1E3A8A', '#1D4ED8']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.header}
+      >
+        <View style={styles.headerTop}>
+          <View style={styles.headerIconContainer}>
+            {activeTab === 'customers' ? (
+              <Users size={28} color="#FFFFFF" />
+            ) : (
+              <Truck size={28} color="#FFFFFF" />
+            )}
+          </View>
+          <Text style={styles.headerTitle}>
+            {activeTab === 'customers' ? 'Customers' : 'Suppliers'}
+          </Text>
+        </View>
+
+        <View style={styles.headerStats}>
+          <View style={styles.statItem}>
+            <Text style={styles.statValue}>
+              {activeTab === 'customers' ? customers.length : suppliers.length}
+            </Text>
+            <Text style={styles.statLabel}>
+              Total {activeTab === 'customers' ? 'Customers' : 'Suppliers'}
+            </Text>
+          </View>
+        </View>
       </LinearGradient>
 
       <View style={styles.content}>
@@ -402,6 +432,10 @@ export default function Customers() {
             style={[styles.tab, activeTab === 'customers' && styles.activeTab]}
             onPress={() => setActiveTab('customers')}
           >
+            <Users
+              size={16}
+              color={activeTab === 'customers' ? '#FFFFFF' : '#64748B'}
+            />
             <Text
               style={[
                 styles.tabText,
@@ -415,6 +449,10 @@ export default function Customers() {
             style={[styles.tab, activeTab === 'suppliers' && styles.activeTab]}
             onPress={() => setActiveTab('suppliers')}
           >
+            <Truck
+              size={16}
+              color={activeTab === 'suppliers' ? '#FFFFFF' : '#64748B'}
+            />
             <Text
               style={[
                 styles.tabText,
@@ -429,10 +467,11 @@ export default function Customers() {
         {/* Search and Add Button */}
         <View style={styles.topSection}>
           <View style={styles.searchContainer}>
-            <Search size={20} color="#6B7280" style={styles.searchIcon} />
+            <Search size={20} color="#64748B" style={styles.searchIcon} />
             <TextInput
               style={styles.searchInput}
               placeholder={`Search ${activeTab}...`}
+              placeholderTextColor="#94A3B8"
               value={searchQuery}
               onChangeText={setSearchQuery}
             />
@@ -442,7 +481,7 @@ export default function Customers() {
             onPress={() => openModal()}
           >
             <LinearGradient
-              colors={['#138808', '#0F6605']}
+              colors={['#3B82F6', '#1D4ED8']}
               style={styles.addButtonGradient}
             >
               <Plus size={20} color="#FFFFFF" />
@@ -452,13 +491,35 @@ export default function Customers() {
 
         {/* Conditional Lists */}
         {activeTab === 'customers' ? (
-          <FlatList<Customer>
-            data={filteredCustomers}
-            keyExtractor={(item) => item.id.toString()}
-            renderItem={renderCustomerCard}
-            showsVerticalScrollIndicator={false}
-            style={styles.list}
-          />
+          filteredCustomers.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Users size={64} color="#94A3B8" />
+              <Text style={styles.emptyStateText}>No customers found</Text>
+              <Text style={styles.emptyStateSubtext}>
+                {searchQuery
+                  ? 'Try a different search term'
+                  : 'Tap the + button to add a customer'}
+              </Text>
+            </View>
+          ) : (
+            <FlatList<Customer>
+              data={filteredCustomers}
+              keyExtractor={(item) => item.id.toString()}
+              renderItem={renderCustomerCard}
+              showsVerticalScrollIndicator={false}
+              style={styles.list}
+            />
+          )
+        ) : filteredSuppliers.length === 0 ? (
+          <View style={styles.emptyState}>
+            <Truck size={64} color="#94A3B8" />
+            <Text style={styles.emptyStateText}>No suppliers found</Text>
+            <Text style={styles.emptyStateSubtext}>
+              {searchQuery
+                ? 'Try a different search term'
+                : 'Tap the + button to add a supplier'}
+            </Text>
+          </View>
         ) : (
           <FlatList<Supplier>
             data={filteredSuppliers}
@@ -485,7 +546,7 @@ export default function Customers() {
                 {activeTab === 'customers' ? 'Customer' : 'Supplier'}
               </Text>
               <TouchableOpacity onPress={closeModal}>
-                <X size={24} color="#6B7280" />
+                <X size={24} color="#64748B" />
               </TouchableOpacity>
             </View>
 
@@ -499,6 +560,7 @@ export default function Customers() {
                     setFormData({ ...formData, name: text })
                   }
                   placeholder="Enter name"
+                  placeholderTextColor="#94A3B8"
                 />
               </View>
 
@@ -511,6 +573,7 @@ export default function Customers() {
                     setFormData({ ...formData, phone: text })
                   }
                   placeholder="Enter phone number"
+                  placeholderTextColor="#94A3B8"
                   keyboardType="phone-pad"
                 />
               </View>
@@ -524,6 +587,7 @@ export default function Customers() {
                     setFormData({ ...formData, email: text })
                   }
                   placeholder="Enter email"
+                  placeholderTextColor="#94A3B8"
                   keyboardType="email-address"
                 />
               </View>
@@ -537,6 +601,7 @@ export default function Customers() {
                     setFormData({ ...formData, address: text })
                   }
                   placeholder="Enter address"
+                  placeholderTextColor="#94A3B8"
                   multiline
                   numberOfLines={3}
                 />
@@ -553,6 +618,7 @@ export default function Customers() {
                         setFormData({ ...formData, company: text })
                       }
                       placeholder="Enter company name"
+                      placeholderTextColor="#94A3B8"
                     />
                   </View>
 
@@ -567,6 +633,7 @@ export default function Customers() {
                         setFormData({ ...formData, products: text })
                       }
                       placeholder="e.g., Rice, Wheat, Pulses"
+                      placeholderTextColor="#94A3B8"
                       multiline
                       numberOfLines={2}
                     />
@@ -584,7 +651,7 @@ export default function Customers() {
               </TouchableOpacity>
               <TouchableOpacity style={styles.saveButton} onPress={saveItem}>
                 <LinearGradient
-                  colors={['#138808', '#0F6605']}
+                  colors={['#3B82F6', '#1D4ED8']}
                   style={styles.saveButtonGradient}
                 >
                   <Text style={styles.saveButtonText}>
@@ -604,54 +671,99 @@ export default function Customers() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: '#F1F5F9',
   },
   header: {
-    paddingTop: 50,
+    paddingTop: Platform.OS === 'ios' ? 58 : 44,
     paddingBottom: 20,
-    paddingHorizontal: 20,
+    paddingHorizontal: 24,
+    borderBottomLeftRadius: 32,
+    borderBottomRightRadius: 32,
+    elevation: 12,
+    shadowColor: '#1E3A8A',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.35,
+    shadowRadius: 20,
+  },
+  headerTop: {
+    flexDirection: 'row',
     alignItems: 'center',
+    marginBottom: 16,
+  },
+  headerIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
   },
   headerTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
+    fontSize: 28,
+    fontWeight: '900',
     color: '#FFFFFF',
-    marginBottom: 5,
+    letterSpacing: 1,
   },
-  headerSubtitle: {
-    fontSize: 16,
+  headerStats: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+  },
+  statItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  statValue: {
+    fontSize: 28,
+    fontWeight: '800',
     color: '#FFFFFF',
-    opacity: 0.9,
+    marginBottom: 4,
+  },
+  statLabel: {
+    fontSize: 12,
+    color: '#93C5FD',
+    fontWeight: '500',
   },
   content: {
     flex: 1,
     paddingHorizontal: 20,
+    paddingTop: 20,
   },
   tabsContainer: {
     flexDirection: 'row',
     backgroundColor: '#FFFFFF',
-    borderRadius: 12,
+    borderRadius: 14,
     padding: 4,
-    marginVertical: 20,
-    shadowColor: '#000',
+    marginBottom: 20,
+    shadowColor: '#94A3B8',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.05,
     shadowRadius: 4,
-    elevation: 3,
+    elevation: 2,
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
   },
   tab: {
     flex: 1,
     paddingVertical: 12,
     alignItems: 'center',
-    borderRadius: 8,
+    borderRadius: 10,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 8,
   },
   activeTab: {
-    backgroundColor: '#8B5CF6',
+    backgroundColor: '#3B82F6',
   },
   tabText: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '600',
-    color: '#6B7280',
+    color: '#64748B',
   },
   activeTabText: {
     color: '#FFFFFF',
@@ -660,53 +772,79 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 20,
-    gap: 15,
+    gap: 12,
   },
   searchContainer: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
-    borderRadius: 12,
+    borderRadius: 14,
     paddingHorizontal: 15,
-    shadowColor: '#000',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    shadowColor: '#94A3B8',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.05,
     shadowRadius: 4,
-    elevation: 3,
+    elevation: 2,
   },
   searchIcon: {
     marginRight: 10,
   },
   searchInput: {
     flex: 1,
-    height: 50,
+    height: 48,
     fontSize: 16,
-    color: '#1F2937',
+    color: '#0F172A',
   },
   addButton: {
-    borderRadius: 12,
+    borderRadius: 14,
     overflow: 'hidden',
   },
   addButtonGradient: {
-    width: 50,
-    height: 50,
+    width: 48,
+    height: 48,
     justifyContent: 'center',
     alignItems: 'center',
+    shadowColor: '#3B82F6',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 4,
   },
   list: {
     flex: 1,
   },
+  emptyState: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 60,
+  },
+  emptyStateText: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#64748B',
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  emptyStateSubtext: {
+    fontSize: 14,
+    color: '#94A3B8',
+    textAlign: 'center',
+  },
   itemCard: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 15,
+    borderRadius: 16,
+    padding: 16,
     marginBottom: 12,
-    shadowColor: '#000',
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
+    shadowColor: '#94A3B8',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.05,
     shadowRadius: 4,
-    elevation: 3,
+    elevation: 2,
   },
   itemInfo: {
     flex: 1,
@@ -715,34 +853,49 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: 10,
+    marginBottom: 12,
+  },
+  itemHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    gap: 12,
+  },
+  avatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#EFF6FF',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   itemName: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#1F2937',
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#0F172A',
+    flex: 1,
   },
   companyName: {
-    fontSize: 14,
-    color: '#8B5CF6',
+    fontSize: 12,
+    color: '#3B82F6',
     fontWeight: '600',
     marginTop: 2,
   },
   itemActions: {
     flexDirection: 'row',
-    gap: 10,
+    gap: 8,
   },
   editButton: {
-    backgroundColor: '#DBEAFE',
-    borderRadius: 8,
+    backgroundColor: '#EFF6FF',
+    borderRadius: 10,
     width: 32,
     height: 32,
     justifyContent: 'center',
     alignItems: 'center',
   },
   deleteButton: {
-    backgroundColor: '#FEE2E2',
-    borderRadius: 8,
+    backgroundColor: '#FEF2F2',
+    borderRadius: 10,
     width: 32,
     height: 32,
     justifyContent: 'center',
@@ -751,23 +904,25 @@ const styles = StyleSheet.create({
   itemDetail: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 6,
+    marginBottom: 8,
   },
   itemDetailText: {
-    fontSize: 14,
-    color: '#6B7280',
-    marginLeft: 8,
+    fontSize: 13,
+    color: '#64748B',
+    marginLeft: 10,
+    flex: 1,
   },
   customerStats: {
     marginTop: 10,
     paddingTop: 10,
     borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
+    borderTopColor: '#F1F5F9',
   },
   statText: {
     fontSize: 12,
-    color: '#6B7280',
+    color: '#64748B',
     marginBottom: 2,
+    fontWeight: '500',
   },
   productsContainer: {
     marginTop: 10,
@@ -775,21 +930,22 @@ const styles = StyleSheet.create({
   productsLabel: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#6B7280',
-    marginBottom: 5,
+    color: '#64748B',
+    marginBottom: 6,
   },
   productsTags: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 5,
+    gap: 6,
   },
   productTag: {
-    fontSize: 10,
-    backgroundColor: '#EDE9FE',
-    color: '#7C3AED',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 4,
+    fontSize: 11,
+    backgroundColor: '#EFF6FF',
+    color: '#3B82F6',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
+    fontWeight: '500',
   },
   modalOverlay: {
     flex: 1,
@@ -799,10 +955,10 @@ const styles = StyleSheet.create({
   },
   modalContent: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 20,
+    borderRadius: 24,
+    padding: 24,
     width: '90%',
-    maxHeight: '80%',
+    maxHeight: '85%',
   },
   modalHeader: {
     flexDirection: 'row',
@@ -811,65 +967,73 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   modalTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#1F2937',
+    fontSize: 22,
+    fontWeight: '800',
+    color: '#0F172A',
+    letterSpacing: 0.3,
   },
   formContainer: {
-    maxHeight: 400,
+    maxHeight: 450,
   },
   inputGroup: {
-    marginBottom: 20,
+    marginBottom: 18,
   },
   inputLabel: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '600',
-    color: '#1F2937',
+    color: '#475569',
     marginBottom: 8,
+    letterSpacing: 0.3,
   },
   textInput: {
-    borderWidth: 1,
-    borderColor: '#D1D5DB',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 16,
-    color: '#1F2937',
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 15,
+    color: '#0F172A',
+    backgroundColor: '#FFFFFF',
   },
   multilineInput: {
-    height: 80,
+    minHeight: 80,
     textAlignVertical: 'top',
   },
   modalButtons: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginTop: 20,
-    gap: 15,
+    gap: 12,
   },
   cancelButton: {
     flex: 1,
-    backgroundColor: '#F3F4F6',
-    borderRadius: 8,
+    backgroundColor: '#F1F5F9',
+    borderRadius: 12,
     paddingVertical: 12,
     alignItems: 'center',
   },
   cancelButtonText: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#6B7280',
+    color: '#64748B',
   },
   saveButton: {
     flex: 1,
-    borderRadius: 8,
+    borderRadius: 12,
     overflow: 'hidden',
   },
   saveButtonGradient: {
     paddingVertical: 12,
     alignItems: 'center',
+    shadowColor: '#3B82F6',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 4,
   },
   saveButtonText: {
     fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: '700',
     color: '#FFFFFF',
   },
 });
