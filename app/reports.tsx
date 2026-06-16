@@ -40,7 +40,7 @@ import {
   getItemSalesSummary,
   ItemSalesSummary,
   PartySummaryBill,
-} from '../../lib/db';
+} from '../lib/db';
 
 type TabType = 'statement' | 'itemSummary' | 'partySummary';
 

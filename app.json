@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "bolt-expo-nativewind",
-    "slug": "bolt-expo-nativewind",
+    "name": "bill-karo",
+    "slug": "bill-karo",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -21,7 +21,8 @@
       "expo-font",
       "expo-web-browser",
       "expo-sqlite",
-      "react-native-ble-plx"
+      "react-native-ble-plx",
+      "@react-native-community/datetimepicker"
     ],
     "experiments": {
       "typedRoutes": true
@@ -29,11 +30,16 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "9ccd331b-974e-416c-9b2a-201314aff90a"
+        "projectId": "6ba8240f-07c5-4d60-988f-ca0d8cd0d859"
       }
     },
     "android": {
-      "package": "com.sameermakwani.BillKaro"
+      "package": "com.sameermakwani.BillKaro",
+      "permissions": [
+        "android.permission.BLUETOOTH",
+        "android.permission.BLUETOOTH_ADMIN",
+        "android.permission.BLUETOOTH_CONNECT"
+      ]
     }
   }
 }

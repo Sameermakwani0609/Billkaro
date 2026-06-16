@@ -41,7 +41,7 @@ import {
   Supplier,
   updateProductStock,
   updatePurchaseBill,
-} from '../../lib/db';
+} from '../lib/db';
 
 type FilterType = 'All' | 'Cash' | 'Credit';
 
@@ -102,7 +102,6 @@ export default function ViewPurchaseScreen() {
     setLoading(true);
     try {
       const bills = await getAllPurchaseBills();
-      // Fetch items for each bill
       const billsWithItems = await Promise.all(
         bills.map(async (bill) => {
           const fullBill = await getPurchaseBillWithItems(bill.id);
@@ -133,7 +132,6 @@ export default function ViewPurchaseScreen() {
     try {
       const categoryList = await getAllCategories();
       setCategories(categoryList);
-      console.log('Categories loaded:', categoryList);
     } catch (error) {
       console.error('Error loading categories:', error);
     }
@@ -142,12 +140,10 @@ export default function ViewPurchaseScreen() {
   const filterBills = () => {
     let filtered = [...purchaseBills];
 
-    // Apply bill type filter
     if (filterType !== 'All') {
       filtered = filtered.filter((bill) => bill.billType === filterType);
     }
 
-    // Apply date filter
     if (selectedDate && isDateFilterActive) {
       const selectedDateString = selectedDate.toISOString().split('T')[0];
       filtered = filtered.filter((bill) => {
@@ -156,7 +152,6 @@ export default function ViewPurchaseScreen() {
       });
     }
 
-    // Apply search query filter
     if (searchQuery.trim() !== '') {
       filtered = filtered.filter(
         (bill) =>
@@ -227,8 +222,6 @@ export default function ViewPurchaseScreen() {
         return;
       }
 
-      console.log('Loaded bill items with categories:', completeBill.items);
-
       setSelectedBill(completeBill);
       setSupplierName(completeBill.supplierName);
       setSupplierId(completeBill.supplierId);
@@ -260,7 +253,6 @@ export default function ViewPurchaseScreen() {
     try {
       const totalAmount = getTotalAmount();
 
-      // First, reverse old stock
       if (selectedBill?.items) {
         for (const oldItem of selectedBill.items) {
           const products = await getAllProducts();
@@ -278,7 +270,6 @@ export default function ViewPurchaseScreen() {
         }
       }
 
-      // Then apply new stock
       for (const newItem of items) {
         const products = await getAllProducts();
         const product = products.find(
@@ -294,7 +285,6 @@ export default function ViewPurchaseScreen() {
         }
       }
 
-      // Update the bill with categoryId
       const updatedItems = items.map((item) => ({
         name: item.name,
         mrp: item.mrp,
@@ -328,7 +318,6 @@ export default function ViewPurchaseScreen() {
     }
   };
 
-  // Item Management Functions
   const addItem = () => {
     if (
       !itemForm.name ||
@@ -345,7 +334,6 @@ export default function ViewPurchaseScreen() {
       parseFloat(itemForm.sellPrice) * parseFloat(itemForm.quantity);
 
     if (isEditingItem && itemForm.id) {
-      // Edit existing item
       const updatedItems = items.map((item) =>
         item.id === itemForm.id
           ? {
@@ -363,7 +351,6 @@ export default function ViewPurchaseScreen() {
       );
       setItems(updatedItems);
     } else {
-      // Add new item
       const newItem: PurchaseItem = {
         id: Date.now(),
         purchaseBillId: selectedBill?.id || 0,
@@ -383,9 +370,6 @@ export default function ViewPurchaseScreen() {
   };
 
   const editItem = (item: PurchaseItem) => {
-    console.log('Editing item with categoryId:', item.categoryId);
-    console.log('Available categories:', categories);
-
     setItemForm({
       id: item.id,
       name: item.name,
@@ -515,7 +499,6 @@ export default function ViewPurchaseScreen() {
         </View>
       </View>
 
-      {/* Items Summary */}
       {item.items && item.items.length > 0 && (
         <View style={styles.itemsSummary}>
           <Text style={styles.itemsTitle}>Items ({item.items.length}):</Text>
@@ -538,7 +521,6 @@ export default function ViewPurchaseScreen() {
         </View>
       )}
 
-      {/* Total Amount */}
       <View style={styles.totalRow}>
         <Text style={styles.totalLabel}>Total Amount:</Text>
         <Text style={styles.totalAmount}>₹{item.totalAmount.toFixed(2)}</Text>
@@ -629,7 +611,6 @@ export default function ViewPurchaseScreen() {
         </View>
       </View>
 
-      {/* Date Picker */}
       {showDatePicker && (
         <DateTimePicker
           value={selectedDate || new Date()}
@@ -766,7 +747,7 @@ export default function ViewPurchaseScreen() {
         }
       />
 
-      {/* Edit Bill Modal */}
+      {/* Edit Bill Modal with U-Shaped Top Bar */}
       <Modal
         visible={showEditModal}
         animationType="slide"
@@ -777,19 +758,36 @@ export default function ViewPurchaseScreen() {
           <LinearGradient
             colors={['#0F172A', '#1E3A8A', '#1D4ED8']}
             start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-            style={styles.modalHeader}
+            end={{ x: 1, y: 1 }}
+            style={styles.editModalHeader}
           >
-            <View style={styles.modalHeaderContent}>
-              <Text style={styles.modalTitle}>
-                Edit Purchase Bill #{selectedBill?.billNo}
-              </Text>
+            <View style={styles.editModalHeaderContent}>
               <TouchableOpacity
-                style={styles.closeButton}
+                style={styles.modalBackButton}
                 onPress={() => setShowEditModal(false)}
               >
-                <X size={24} color="#FFF" />
+                <ArrowLeft size={24} color="#FFFFFF" />
               </TouchableOpacity>
+              <View style={styles.modalHeaderCenter}>
+                <Edit3 size={24} color="#FFFFFF" />
+                <Text style={styles.editModalTitle}>
+                  Edit Purchase Bill #{selectedBill?.billNo}
+                </Text>
+              </View>
+              <View style={styles.modalHeaderRight} />
+            </View>
+            <View style={styles.editModalStats}>
+              <View style={styles.editStatItem}>
+                <Text style={styles.editStatValue}>{items.length}</Text>
+                <Text style={styles.editStatLabel}>Items in Bill</Text>
+              </View>
+              <View style={styles.editStatDivider} />
+              <View style={styles.editStatItem}>
+                <Text style={styles.editStatValue}>
+                  {formatCurrency(getTotalAmount())}
+                </Text>
+                <Text style={styles.editStatLabel}>Total Amount</Text>
+              </View>
             </View>
           </LinearGradient>
 
@@ -868,7 +866,7 @@ export default function ViewPurchaseScreen() {
                 </TouchableOpacity>
               </View>
 
-              {items.map((item, index) => (
+              {items.map((item) => (
                 <View key={item.id} style={styles.itemCard}>
                   <View style={styles.itemHeader}>
                     <View style={styles.itemInfo}>
@@ -985,7 +983,12 @@ export default function ViewPurchaseScreen() {
       >
         <View style={styles.modalOverlay}>
           <View style={styles.itemModalContent}>
-            <View style={styles.itemModalHeader}>
+            <LinearGradient
+              colors={['#0F172A', '#1E3A8A']}
+              style={styles.itemModalHeader}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+            >
               <Text style={styles.itemModalTitle}>
                 {isEditingItem ? 'Edit Item' : 'Add New Item'}
               </Text>
@@ -993,9 +996,9 @@ export default function ViewPurchaseScreen() {
                 onPress={resetItemForm}
                 style={styles.modalCloseButton}
               >
-                <X size={24} color="#64748B" />
+                <X size={24} color="#FFFFFF" />
               </TouchableOpacity>
-            </View>
+            </LinearGradient>
 
             <ScrollView style={styles.itemModalBody}>
               <View style={styles.itemFormGroup}>
@@ -1100,7 +1103,6 @@ export default function ViewPurchaseScreen() {
                       itemForm.categoryId ? itemForm.categoryId.toString() : ''
                     }
                     onValueChange={(value) => {
-                      console.log('Selected category value:', value);
                       setItemForm({
                         ...itemForm,
                         categoryId: value ? parseInt(value) : null,
@@ -1505,25 +1507,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#F1F5F9',
   },
-  modalHeader: {
-    paddingTop: Platform.OS === 'ios' ? 58 : 44,
-    paddingBottom: 16,
-  },
-  modalHeaderContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: '#FFFFFF',
-    letterSpacing: 0.3,
-  },
-  closeButton: {
-    padding: 4,
-  },
   modalContent: {
     flex: 1,
     padding: 20,
@@ -1754,17 +1737,19 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
   },
   itemModalTitle: {
     fontSize: 18,
     fontWeight: '800',
-    color: '#0F172A',
+    color: '#FFFFFF',
     letterSpacing: 0.3,
   },
   modalCloseButton: {
-    padding: 4,
+    padding: 8,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    borderRadius: 20,
   },
   itemModalBody: {
     padding: 20,
@@ -1817,5 +1802,74 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 15,
     fontWeight: '700',
+  },
+
+  // Edit Modal U-Shaped Styles
+  editModalHeader: {
+    paddingTop: Platform.OS === 'ios' ? 58 : 44,
+    paddingBottom: 20,
+    borderBottomLeftRadius: 32,
+    borderBottomRightRadius: 32,
+    elevation: 12,
+    shadowColor: '#1E3A8A',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.35,
+    shadowRadius: 20,
+  },
+  editModalHeaderContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    marginBottom: 16,
+  },
+  modalBackButton: {
+    padding: 8,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    borderRadius: 12,
+  },
+  modalHeaderCenter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  editModalTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    letterSpacing: 0.3,
+  },
+  modalHeaderRight: {
+    width: 44,
+  },
+  editModalStats: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-around',
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 20,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    marginHorizontal: 20,
+  },
+  editStatItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  editStatValue: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    marginBottom: 4,
+  },
+  editStatLabel: {
+    fontSize: 10,
+    color: '#93C5FD',
+    fontWeight: '500',
+  },
+  editStatDivider: {
+    width: 1,
+    height: 30,
+    backgroundColor: 'rgba(255,255,255,0.2)',
   },
 });

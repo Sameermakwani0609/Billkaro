@@ -24,7 +24,7 @@ import {
   getAllProducts,
   insertCategory,
   updateCategory,
-} from '../../lib/db';
+} from '../lib/db';
 
 const CategoryManagement = () => {
   const navigation = useNavigation();

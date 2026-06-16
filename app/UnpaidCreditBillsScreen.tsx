@@ -38,7 +38,7 @@ import {
   getPaymentsByBillId,
   insertPayment,
   Payment,
-} from '../../lib/db';
+} from '../lib/db';
 
 export default function UnpaidCreditBillsScreen() {
   const navigation = useNavigation();

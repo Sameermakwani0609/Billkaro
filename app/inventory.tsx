@@ -31,7 +31,7 @@ import {
   insertProduct,
   isSqliteAvailable,
   updateProduct,
-} from '../../lib/db';
+} from '../lib/db';
 
 export default function Inventory() {
   const [searchQuery, setSearchQuery] = useState('');

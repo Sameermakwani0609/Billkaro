@@ -25,7 +25,7 @@ import {
   insertPurchaseBill,
   Supplier,
   updateProduct,
-} from '../../lib/db';
+} from '../lib/db';
 
 interface PurchaseItem {
   id: string;

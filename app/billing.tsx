@@ -48,7 +48,7 @@ import {
   searchCustomersByName,
   updateCustomerPurchases,
   updateProductStock,
-} from '../../lib/db';
+} from '../lib/db';
 
 // ─────────────────────────────────────────────
 // Types

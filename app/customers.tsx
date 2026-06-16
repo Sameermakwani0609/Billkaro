@@ -38,7 +38,7 @@ import {
   isSqliteAvailable,
   updateCustomer,
   updateSupplier,
-} from '../../lib/db';
+} from '../lib/db';
 
 // Type guards to check if an item is Customer or Supplier
 const isCustomer = (item: Customer | Supplier): item is Customer => {

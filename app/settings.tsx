@@ -11,11 +11,11 @@ import {
   FolderOpen,
   Heart,
   Info,
+  Key,
   Mail,
   Phone,
   Share2,
   Shield,
-  Smartphone,
   Star,
   Store,
   Upload,
@@ -41,9 +41,11 @@ import {
   AppSettings,
   backupDatabase,
   getAppSettings,
+  getCurrentActivation,
+  getTrialStatus,
   restoreDatabase,
   saveAppSettings,
-} from '../../lib/db';
+} from '../lib/db';
 
 // ─── Safe DocumentPicker import ────────────────────────────────────────────────
 import * as DocumentPickerModule from 'expo-document-picker';
@@ -56,11 +58,10 @@ export default function Settings() {
   const [aboutModalVisible, setAboutModalVisible] = useState(false);
   const [backupModalVisible, setBackupModalVisible] = useState(false);
   const [restoreModalVisible, setRestoreModalVisible] = useState(false);
-  const [restoreSourceModalVisible, setRestoreSourceModalVisible] =
-    useState(false);
   const [backupInProgress, setBackupInProgress] = useState(false);
   const [restoreInProgress, setRestoreInProgress] = useState(false);
-  const [lastBackupFile, setLastBackupFile] = useState<string>('');
+  const [activationStatus, setActivationStatus] = useState<any>(null);
+  const [trialStatus, setTrialStatus] = useState<any>(null);
   const [shopSettings, setShopSettings] = useState<AppSettings>({
     shopName: '',
     shopAddress: '',
@@ -81,7 +82,15 @@ export default function Settings() {
   useEffect(() => {
     loadSettings();
     createBillKaroFolder();
+    loadLicenseStatus();
   }, []);
+
+  const loadLicenseStatus = () => {
+    const activation = getCurrentActivation();
+    const trial = getTrialStatus();
+    setActivationStatus(activation);
+    setTrialStatus(trial);
+  };
 
   const createBillKaroFolder = async () => {
     try {
@@ -155,11 +164,11 @@ export default function Settings() {
       encoding: FileSystem.EncodingType.UTF8,
     });
 
-    setLastBackupFile(filePath);
     return filePath;
   };
 
-  const handleBackup = async () => {
+  // Backup Option 1: Share File (WhatsApp, Email, etc.)
+  const handleShareBackup = async () => {
     try {
       setBackupInProgress(true);
 
@@ -181,104 +190,75 @@ export default function Settings() {
       const filePath = await createLocalBackup();
       const fileName = filePath.split('/').pop();
 
-      Alert.alert(
-        '✅ Backup Created!',
-        `File saved: ${fileName}\n\n📍 Location: BillKaro folder in phone storage\n\nYou can now restore this backup anytime.`,
-        [{ text: 'OK', onPress: () => setBackupModalVisible(false) }],
-      );
-    } catch (error) {
-      console.error('Backup error:', error);
-      Alert.alert('Error', 'Failed to create backup. Please try again.');
-    } finally {
-      setBackupInProgress(false);
-    }
-  };
-
-  const handleUploadToGoogleDrive = async () => {
-    try {
-      setBackupInProgress(true);
-
-      let filePath = lastBackupFile;
-      filePath = await createLocalBackup();
-
       const isSharingAvailable = await Sharing.isAvailableAsync();
 
-      if (!isSharingAvailable) {
-        Alert.alert(
-          'Error',
-          'Sharing is not available on this device. Please use "Backup to Phone" instead.',
-        );
-        return;
-      }
-
-      if (Platform.OS === 'android') {
-        await Sharing.shareAsync(filePath, {
-          mimeType: 'application/json',
-          dialogTitle: 'Upload to Google Drive',
-          UTI: 'public.json',
-        });
-
-        Alert.alert(
-          'Google Drive Upload',
-          'Select "Google Drive" from the options above to save your backup directly to your Drive.',
-          [{ text: 'OK' }],
-        );
-      } else {
-        await Sharing.shareAsync(filePath, {
-          mimeType: 'application/json',
-          dialogTitle: 'Save Backup to Google Drive',
-          UTI: 'public.json',
-        });
-      }
-    } catch (error) {
-      console.error('Google Drive upload error:', error);
-      Alert.alert('Error', 'Failed to open Google Drive. Please try again.');
-    } finally {
-      setBackupInProgress(false);
-    }
-  };
-
-  const handleShareBackup = async () => {
-    try {
-      if (!lastBackupFile) {
-        Alert.alert(
-          'Error',
-          'No backup file found. Please create a backup first.',
-        );
-        return;
-      }
-
-      const isSharingAvailable = await Sharing.isAvailableAsync();
       if (!isSharingAvailable) {
         Alert.alert('Error', 'Sharing is not available on this device');
         return;
       }
 
-      await Sharing.shareAsync(lastBackupFile, {
+      await Sharing.shareAsync(filePath, {
         mimeType: 'application/json',
         dialogTitle: 'Share Backup File',
       });
+
+      Alert.alert(
+        '✅ Backup Shared!',
+        `Backup file "${fileName}" is ready to share via WhatsApp, Email, or any other app.`,
+        [{ text: 'OK', onPress: () => setBackupModalVisible(false) }],
+      );
     } catch (error) {
-      console.error('Share error:', error);
+      console.error('Share backup error:', error);
       Alert.alert('Error', 'Failed to share backup file');
+    } finally {
+      setBackupInProgress(false);
+    }
+  };
+
+  // Backup Option 2: Direct Upload to Google Drive
+  const handleUploadToGoogleDrive = async () => {
+    try {
+      setBackupInProgress(true);
+
+      const filePath = await createLocalBackup();
+      const fileName = filePath.split('/').pop();
+
+      const isSharingAvailable = await Sharing.isAvailableAsync();
+
+      if (!isSharingAvailable) {
+        Alert.alert('Error', 'Sharing is not available on this device');
+        return;
+      }
+
+      await Sharing.shareAsync(filePath, {
+        mimeType: 'application/json',
+        dialogTitle: 'Save to Google Drive',
+      });
+
+      Alert.alert(
+        '📤 Google Drive Upload',
+        `Select "Google Drive" from the sharing options to save your backup.\n\n📁 File: ${fileName}`,
+        [{ text: 'OK', onPress: () => setBackupModalVisible(false) }],
+      );
+    } catch (error) {
+      console.error('Google Drive upload error:', error);
+      Alert.alert('Error', 'Failed to open sharing options. Please try again.');
+    } finally {
+      setBackupInProgress(false);
     }
   };
 
   const showBackupLocation = async () => {
     Alert.alert(
       '📁 Backup Location',
-      `Your backups are saved in:\n\n${BILLKARO_DIR}\n\n📱 How to find your backups:\n1. Open any File Manager app\n2. Navigate to: Internal Storage\n3. Go to: Android/data/host.exp.exponent/files/BillKaro/\n\n📝 Files are named: Backup_YYYY-MM-DD_HH-MM-SS.json`,
+      `Your backups are temporarily saved in:\n\n${BILLKARO_DIR}\n\n📱 How to find your backups:\n1. Open any File Manager app\n2. Navigate to: Internal Storage\n3. Go to: Android/data/host.exp.exponent/files/BillKaro/\n\n📝 Files are named: Backup_YYYY-MM-DD_HH-MM-SS.json\n\n💡 Tip: Use "Share File" to save backups permanently.`,
       [{ text: 'OK' }],
     );
   };
 
-  const handleRestorePress = () => {
+  // Restore Option 1: Select from File Manager
+  const handleRestoreFromFileManager = async () => {
     setRestoreModalVisible(false);
-    setTimeout(() => setRestoreSourceModalVisible(true), 300);
-  };
-
-  const handleRestoreFromGoogleDrive = async () => {
-    setRestoreSourceModalVisible(false);
 
     if (Platform.OS === 'web') {
       handleRestoreWeb();
@@ -286,7 +266,11 @@ export default function Settings() {
     }
 
     if (!DocumentPicker) {
-      Alert.alert('Error', 'Document picker is not available.');
+      Alert.alert(
+        'Error',
+        'Document picker is not available on this platform.',
+      );
+      setRestoreInProgress(false);
       return;
     }
 
@@ -303,8 +287,9 @@ export default function Settings() {
         return;
       }
 
-      const fileUri = pickerResult.assets?.[0]?.uri;
-      const fileName = pickerResult.assets?.[0]?.name || 'backup file';
+      const assets = (pickerResult as any).assets;
+      const fileUri = assets?.[0]?.uri;
+      const fileName = assets?.[0]?.name || 'backup file';
 
       if (!fileUri) {
         Alert.alert('Error', 'Could not read the selected file.');
@@ -313,6 +298,71 @@ export default function Settings() {
       }
 
       confirmAndRestore(fileUri, fileName);
+    } catch (err) {
+      console.error('File picker error:', err);
+      Alert.alert('Error', 'Failed to open file picker.');
+      setRestoreInProgress(false);
+    }
+  };
+
+  // Restore Option 2: Restore from Google Drive
+  const handleRestoreFromGoogleDrive = async () => {
+    setRestoreModalVisible(false);
+
+    if (Platform.OS === 'web') {
+      handleRestoreWeb();
+      return;
+    }
+
+    if (!DocumentPicker) {
+      Alert.alert(
+        'Error',
+        'Document picker is not available on this platform.',
+      );
+      setRestoreInProgress(false);
+      return;
+    }
+
+    try {
+      setRestoreInProgress(true);
+
+      Alert.alert(
+        '📤 Select from Google Drive',
+        'In the file picker, tap the menu (☰) and select "Google Drive" to browse your Drive files.',
+        [
+          {
+            text: 'OK',
+            onPress: async () => {
+              const pickerResult = await DocumentPicker.getDocumentAsync({
+                type: ['application/json', 'application/octet-stream', '*/*'],
+                copyToCacheDirectory: true,
+              });
+
+              if (pickerResult.canceled) {
+                setRestoreInProgress(false);
+                return;
+              }
+
+              const assets = (pickerResult as any).assets;
+              const fileUri = assets?.[0]?.uri;
+              const fileName = assets?.[0]?.name || 'backup file';
+
+              if (!fileUri) {
+                Alert.alert('Error', 'Could not read the selected file.');
+                setRestoreInProgress(false);
+                return;
+              }
+
+              confirmAndRestore(fileUri, fileName);
+            },
+          },
+          {
+            text: 'Cancel',
+            onPress: () => setRestoreInProgress(false),
+            style: 'cancel',
+          },
+        ],
+      );
     } catch (err) {
       console.error('Drive picker error:', err);
       Alert.alert('Error', 'Failed to open Google Drive picker.');
@@ -320,58 +370,15 @@ export default function Settings() {
     }
   };
 
-  const handleRestoreFromMobileStorage = async () => {
-    setRestoreSourceModalVisible(false);
-
-    if (Platform.OS === 'web') {
-      handleRestoreWeb();
-      return;
-    }
-
-    if (!DocumentPicker) {
-      Alert.alert('Error', 'Document picker is not available.');
-      return;
-    }
-
-    try {
-      setRestoreInProgress(true);
-
-      const pickerResult = await DocumentPicker.getDocumentAsync({
-        type: ['application/json', 'application/octet-stream', '*/*'],
-        copyToCacheDirectory: true,
-      });
-
-      if (pickerResult.canceled) {
-        setRestoreInProgress(false);
-        return;
-      }
-
-      const fileUri = pickerResult.assets?.[0]?.uri;
-      const fileName = pickerResult.assets?.[0]?.name || 'backup file';
-
-      if (!fileUri) {
-        Alert.alert('Error', 'Could not read the selected file.');
-        setRestoreInProgress(false);
-        return;
-      }
-
-      confirmAndRestore(fileUri, fileName);
-    } catch (err) {
-      console.error('Storage picker error:', err);
-      Alert.alert('Error', 'Failed to open file picker.');
-      setRestoreInProgress(false);
-    }
-  };
-
   const resolveToReadableUri = async (uri: string): Promise<string> => {
     if (
-      uri.startsWith(FileSystem.cacheDirectory ?? 'file://') ||
-      uri.startsWith(FileSystem.documentDirectory ?? 'file://')
+      uri.startsWith(FileSystem.cacheDirectory || 'file://') ||
+      uri.startsWith(FileSystem.documentDirectory || 'file://')
     ) {
       return uri;
     }
 
-    const cacheDir = FileSystem.cacheDirectory ?? '';
+    const cacheDir = FileSystem.cacheDirectory || '';
     const destPath = `${cacheDir}restore_tmp_${Date.now()}.json`;
 
     await FileSystem.copyAsync({ from: uri, to: destPath });
@@ -403,7 +410,6 @@ export default function Settings() {
                 {
                   text: 'OK',
                   onPress: () => {
-                    setRestoreSourceModalVisible(false);
                     loadSettings();
                   },
                 },
@@ -454,7 +460,6 @@ export default function Settings() {
         Alert.alert('Success', 'Database restored! The page will now reload.', [
           { text: 'OK', onPress: () => window.location.reload() },
         ]);
-        setRestoreSourceModalVisible(false);
       } catch (err) {
         console.error('Restore error:', err);
         Alert.alert(
@@ -547,6 +552,35 @@ export default function Settings() {
               ) : null}
             </View>
           ) : null}
+        </View>
+
+        {/* License Activation Section */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>License</Text>
+          <View style={styles.settingsCard}>
+            <TouchableOpacity
+              style={styles.settingItem}
+              onPress={() => navigation.navigate('activation' as never)}
+            >
+              <View style={styles.settingItemLeft}>
+                <View
+                  style={[styles.settingIcon, { backgroundColor: '#EFF6FF' }]}
+                >
+                  <Key size={20} color="#3B82F6" />
+                </View>
+                <View style={styles.settingContent}>
+                  <Text style={styles.settingTitle}>Activate License</Text>
+                  <Text style={styles.settingDescription}>
+                    {activationStatus?.isValid
+                      ? `Active - ${activationStatus.daysLeft} days remaining`
+                      : trialStatus?.isActive
+                        ? `Trial - ${trialStatus.daysLeft} days remaining`
+                        : 'Activate your license key'}
+                  </Text>
+                </View>
+              </View>
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* Support Section */}
@@ -705,7 +739,7 @@ export default function Settings() {
         </View>
       </ScrollView>
 
-      {/* ─── Backup Modal ───────────────────────────────────────────────────── */}
+      {/* ─── Backup Modal (2 Options: Share File & Google Drive) ───────────────────────────────────── */}
       <Modal
         animationType="fade"
         transparent
@@ -718,7 +752,7 @@ export default function Settings() {
               colors={['#0F172A', '#1E3A8A']}
               style={styles.modalHeaderGradient}
             >
-              <Text style={styles.modalTitle}>Create Backup</Text>
+              <Text style={styles.modalTitle}>Backup Database</Text>
               <TouchableOpacity
                 onPress={() =>
                   !backupInProgress && setBackupModalVisible(false)
@@ -733,71 +767,56 @@ export default function Settings() {
             </View>
 
             <Text style={styles.confirmMessage}>
-              Choose where to save your backup. It includes all customers,
-              products, bills, and settings.
+              Choose how to save your backup. Includes all customers, products,
+              bills, and settings.
             </Text>
 
-            <View style={styles.backupDestRow}>
+            <View style={styles.backupOptionsContainer}>
+              {/* Option 1: Share File */}
               <TouchableOpacity
-                style={styles.backupDestButton}
-                onPress={handleBackup}
+                style={styles.backupOptionButton}
+                onPress={handleShareBackup}
                 disabled={backupInProgress}
               >
                 <LinearGradient
                   colors={['#3B82F6', '#1D4ED8']}
-                  style={styles.backupDestGradient}
+                  style={styles.backupOptionGradient}
                 >
                   {backupInProgress ? (
                     <ActivityIndicator color="#fff" size="small" />
                   ) : (
                     <>
-                      <Smartphone size={22} color="#fff" />
-                      <Text style={styles.backupDestLabel}>Phone</Text>
-                      <Text style={styles.backupDestSub}>BillKaro folder</Text>
+                      <Share2 size={32} color="#fff" />
+                      <Text style={styles.backupOptionTitle}>Share File</Text>
+                      <Text style={styles.backupOptionDescription}>
+                        Share via WhatsApp, Email, or save to device
+                      </Text>
                     </>
                   )}
                 </LinearGradient>
               </TouchableOpacity>
 
+              {/* Option 2: Google Drive */}
               <TouchableOpacity
-                style={styles.backupDestButton}
+                style={styles.backupOptionButton}
                 onPress={handleUploadToGoogleDrive}
                 disabled={backupInProgress}
               >
                 <LinearGradient
                   colors={['#EA4335', '#C62828']}
-                  style={styles.backupDestGradient}
+                  style={styles.backupOptionGradient}
                 >
                   {backupInProgress ? (
                     <ActivityIndicator color="#fff" size="small" />
                   ) : (
                     <>
-                      <Cloud size={22} color="#fff" />
-                      <Text style={styles.backupDestLabel}>Google Drive</Text>
-                      <Text style={styles.backupDestSub}>Save to cloud</Text>
+                      <Cloud size={32} color="#fff" />
+                      <Text style={styles.backupOptionTitle}>Google Drive</Text>
+                      <Text style={styles.backupOptionDescription}>
+                        Upload directly to your Google Drive
+                      </Text>
                     </>
                   )}
-                </LinearGradient>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.backupDestButton}
-                onPress={handleShareBackup}
-                disabled={backupInProgress || !lastBackupFile}
-              >
-                <LinearGradient
-                  colors={
-                    lastBackupFile
-                      ? ['#10B981', '#059669']
-                      : ['#94A3B8', '#64748B']
-                  }
-                  style={styles.backupDestGradient}
-                >
-                  <Share2 size={22} color="#fff" />
-                  <Text style={styles.backupDestLabel}>Share</Text>
-                  <Text style={styles.backupDestSub}>
-                    {lastBackupFile ? 'WhatsApp / more' : 'Backup first'}
-                  </Text>
                 </LinearGradient>
               </TouchableOpacity>
             </View>
@@ -820,7 +839,7 @@ export default function Settings() {
         </View>
       </Modal>
 
-      {/* ─── Restore Info Modal ───────────────────────────────── */}
+      {/* ─── Restore Modal (2 Options: File Manager & Google Drive) ───────────────────────────────── */}
       <Modal
         animationType="fade"
         transparent
@@ -850,134 +869,72 @@ export default function Settings() {
             </View>
 
             <Text style={styles.confirmMessage}>
-              Select where your backup file is stored. This will replace ALL
-              current data and cannot be undone.
+              Choose where your backup file is stored. This will replace ALL
+              current data.
             </Text>
 
             <Text style={styles.warningText}>
-              ⚠️ Make sure you have a recent backup before restoring!
+              ⚠️ This action cannot be undone! Make sure you have a recent
+              backup.
             </Text>
 
-            <View style={styles.modalButtons}>
+            <View style={styles.restoreOptionsContainer}>
+              {/* Option 1: File Manager */}
               <TouchableOpacity
-                style={styles.cancelButton}
-                onPress={() => setRestoreModalVisible(false)}
-                disabled={restoreInProgress}
-              >
-                <Text style={styles.cancelButtonText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.saveButton,
-                  restoreInProgress && styles.disabledButton,
-                ]}
-                onPress={handleRestorePress}
+                style={styles.restoreOptionButton}
+                onPress={handleRestoreFromFileManager}
                 disabled={restoreInProgress}
               >
                 <LinearGradient
                   colors={['#3B82F6', '#1D4ED8']}
-                  style={styles.saveButtonGradient}
+                  style={styles.restoreOptionGradient}
                 >
-                  <Text style={styles.saveButtonText}>Choose Source →</Text>
+                  {restoreInProgress ? (
+                    <ActivityIndicator color="#fff" size="small" />
+                  ) : (
+                    <>
+                      <FolderOpen size={32} color="#fff" />
+                      <Text style={styles.restoreOptionTitle}>
+                        File Manager
+                      </Text>
+                      <Text style={styles.restoreOptionDescription}>
+                        Select from phone storage
+                      </Text>
+                    </>
+                  )}
+                </LinearGradient>
+              </TouchableOpacity>
+
+              {/* Option 2: Google Drive */}
+              <TouchableOpacity
+                style={styles.restoreOptionButton}
+                onPress={handleRestoreFromGoogleDrive}
+                disabled={restoreInProgress}
+              >
+                <LinearGradient
+                  colors={['#EA4335', '#C62828']}
+                  style={styles.restoreOptionGradient}
+                >
+                  {restoreInProgress ? (
+                    <ActivityIndicator color="#fff" size="small" />
+                  ) : (
+                    <>
+                      <Cloud size={32} color="#fff" />
+                      <Text style={styles.restoreOptionTitle}>
+                        Google Drive
+                      </Text>
+                      <Text style={styles.restoreOptionDescription}>
+                        Restore from Google Drive
+                      </Text>
+                    </>
+                  )}
                 </LinearGradient>
               </TouchableOpacity>
             </View>
-          </View>
-        </View>
-      </Modal>
-
-      {/* ─── Restore Source Picker Modal ──────────────────────────────── */}
-      <Modal
-        animationType="slide"
-        transparent
-        visible={restoreSourceModalVisible}
-        onRequestClose={() =>
-          !restoreInProgress && setRestoreSourceModalVisible(false)
-        }
-      >
-        <View style={styles.bottomSheetOverlay}>
-          <View style={styles.bottomSheet}>
-            <View style={styles.bottomSheetHandle} />
-
-            <Text style={styles.bottomSheetTitle}>
-              Where is your backup saved?
-            </Text>
-            <Text style={styles.bottomSheetSubtitle}>
-              Choose the location of your backup file to restore.
-            </Text>
 
             <TouchableOpacity
-              style={styles.sourceOption}
-              onPress={handleRestoreFromGoogleDrive}
-              disabled={restoreInProgress}
-            >
-              <LinearGradient
-                colors={['#FFF5F5', '#FEE2E2']}
-                style={styles.sourceOptionGradient}
-              >
-                <View
-                  style={[
-                    styles.sourceIconCircle,
-                    { backgroundColor: '#EA4335' },
-                  ]}
-                >
-                  <Cloud size={26} color="#fff" />
-                </View>
-                <View style={styles.sourceOptionText}>
-                  <Text style={styles.sourceOptionTitle}>Google Drive</Text>
-                  <Text style={styles.sourceOptionDesc}>
-                    Restore from a backup saved in your Google Drive cloud
-                    storage
-                  </Text>
-                </View>
-                {restoreInProgress ? (
-                  <ActivityIndicator color="#EA4335" />
-                ) : (
-                  <Text style={styles.sourceArrow}>›</Text>
-                )}
-              </LinearGradient>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.sourceOption}
-              onPress={handleRestoreFromMobileStorage}
-              disabled={restoreInProgress}
-            >
-              <LinearGradient
-                colors={['#F0F9FF', '#E0F2FE']}
-                style={styles.sourceOptionGradient}
-              >
-                <View
-                  style={[
-                    styles.sourceIconCircle,
-                    { backgroundColor: '#3B82F6' },
-                  ]}
-                >
-                  <Smartphone size={26} color="#fff" />
-                </View>
-                <View style={styles.sourceOptionText}>
-                  <Text style={styles.sourceOptionTitle}>Phone Storage</Text>
-                  <Text style={styles.sourceOptionDesc}>
-                    Restore from BillKaro folder on your phone's internal
-                    storage
-                  </Text>
-                </View>
-                {restoreInProgress ? (
-                  <ActivityIndicator color="#3B82F6" />
-                ) : (
-                  <Text style={styles.sourceArrow}>›</Text>
-                )}
-              </LinearGradient>
-            </TouchableOpacity>
-
-            <Text style={styles.pathHint}>
-              📁 Phone path: Internal Storage →
-              Android/data/host.exp.exponent/files/BillKaro/
-            </Text>
-
-            <TouchableOpacity
-              style={styles.cancelButtonFull}
-              onPress={() => setRestoreSourceModalVisible(false)}
+              style={[styles.cancelButton, { marginTop: 12 }]}
+              onPress={() => setRestoreModalVisible(false)}
               disabled={restoreInProgress}
             >
               <Text style={styles.cancelButtonText}>Cancel</Text>
@@ -1183,20 +1140,10 @@ export default function Settings() {
                   <Text style={styles.featureText}>Inventory Management</Text>
                 </View>
                 <View style={styles.featureItem}>
-                  <Users size={18} color="#3B82F6" />
-                  <Text style={styles.featureText}>
-                    Customer & Supplier Management
-                  </Text>
-                </View>
-                <View style={styles.featureItem}>
                   <Shield size={18} color="#3B82F6" />
                   <Text style={styles.featureText}>
                     Secure Data Backup & Restore
                   </Text>
-                </View>
-                <View style={styles.featureItem}>
-                  <FileText size={18} color="#3B82F6" />
-                  <Text style={styles.featureText}>Comprehensive Reports</Text>
                 </View>
               </View>
 
@@ -1515,16 +1462,8 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     alignItems: 'center',
   },
-  cancelButtonFull: {
-    backgroundColor: '#F1F5F9',
-    borderRadius: 12,
-    paddingVertical: 14,
-    alignItems: 'center',
-    marginTop: 8,
-  },
   cancelButtonText: { fontSize: 15, fontWeight: '600', color: '#64748B' },
   saveButton: { flex: 1, borderRadius: 12, overflow: 'hidden' },
-  disabledButton: { opacity: 0.6 },
   saveButtonGradient: { paddingVertical: 12, alignItems: 'center' },
   saveButtonText: { fontSize: 15, fontWeight: '700', color: '#FFFFFF' },
   confirmIconContainer: { alignItems: 'center', marginVertical: 20 },
@@ -1552,108 +1491,56 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
   },
 
-  backupDestRow: {
-    flexDirection: 'row',
-    gap: 10,
+  // Backup Options (2 Options)
+  backupOptionsContainer: {
     paddingHorizontal: 20,
+    gap: 12,
     marginBottom: 16,
   },
-  backupDestButton: {
-    flex: 1,
-    borderRadius: 12,
+  backupOptionButton: {
+    borderRadius: 16,
     overflow: 'hidden',
   },
-  backupDestGradient: {
-    paddingVertical: 12,
+  backupOptionGradient: {
+    padding: 20,
     alignItems: 'center',
-    gap: 4,
+    gap: 8,
   },
-  backupDestLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#fff',
-    marginTop: 4,
-  },
-  backupDestSub: {
-    fontSize: 9,
-    color: 'rgba(255,255,255,0.8)',
-  },
-
-  bottomSheetOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'flex-end',
-  },
-  bottomSheet: {
-    backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    padding: 24,
-    paddingBottom: 36,
-  },
-  bottomSheetHandle: {
-    width: 40,
-    height: 4,
-    backgroundColor: '#E2E8F0',
-    borderRadius: 2,
-    alignSelf: 'center',
-    marginBottom: 20,
-  },
-  bottomSheetTitle: {
+  backupOptionTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#0F172A',
-    marginBottom: 4,
-    textAlign: 'center',
+    color: '#fff',
   },
-  bottomSheetSubtitle: {
-    fontSize: 13,
-    color: '#64748B',
+  backupOptionDescription: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.9)',
     textAlign: 'center',
-    marginBottom: 20,
   },
 
-  sourceOption: {
-    borderRadius: 14,
-    overflow: 'hidden',
-    marginBottom: 12,
-  },
-  sourceOptionGradient: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 14,
-    gap: 14,
-  },
-  sourceIconCircle: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  sourceOptionText: { flex: 1 },
-  sourceOptionTitle: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#0F172A',
-    marginBottom: 2,
-  },
-  sourceOptionDesc: {
-    fontSize: 11,
-    color: '#64748B',
-    lineHeight: 15,
-  },
-  sourceArrow: {
-    fontSize: 24,
-    color: '#94A3B8',
-    fontWeight: '300',
-  },
-  pathHint: {
-    fontSize: 10,
-    color: '#94A3B8',
-    textAlign: 'center',
+  // Restore Options (2 Options)
+  restoreOptionsContainer: {
+    paddingHorizontal: 20,
+    gap: 12,
     marginBottom: 16,
-    lineHeight: 14,
+  },
+  restoreOptionButton: {
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  restoreOptionGradient: {
+    padding: 20,
+    alignItems: 'center',
+    gap: 8,
+  },
+  restoreOptionTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#fff',
+  },
+  restoreOptionDescription: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.9)',
+    textAlign: 'center',
   },
 
   // About Modal Styles
@@ -1800,6 +1687,3 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
 });
-
-// Import missing icons
-import { FileText, Users } from 'lucide-react-native';

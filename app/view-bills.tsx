@@ -8,6 +8,7 @@ import {
   Edit3,
   IndianRupee,
   Minus,
+  Package,
   Plus,
   Search,
   Trash2,
@@ -32,16 +33,18 @@ import {
 import {
   Bill,
   BillItem,
+  Category,
   Customer,
   deleteBill,
   getAllBills,
+  getAllCategories,
   getAllCustomers,
   getAllProducts,
   getBillWithItems,
   Product,
   updateBill,
   updateProductStock,
-} from '../../lib/db';
+} from '../lib/db';
 
 // Define CartItem interface that extends Product
 interface CartItem extends Product {
@@ -80,6 +83,7 @@ export default function ViewBillsScreen() {
   const [billDiscount, setBillDiscount] = useState('');
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [editableRates, setEditableRates] = useState<{ [key: number]: string }>(
     {},
   );
@@ -91,11 +95,13 @@ export default function ViewBillsScreen() {
   const [showAddItemModal, setShowAddItemModal] = useState(false);
   const [productSearchQuery, setProductSearchQuery] = useState('');
   const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
+  const [selectedCategory, setSelectedCategory] = useState<string>('All');
 
   // Load bills on component mount
   useEffect(() => {
     loadBills();
     loadCustomersAndProducts();
+    loadCategories();
   }, []);
 
   // Filter bills when search query, filter type, or date changes
@@ -103,24 +109,45 @@ export default function ViewBillsScreen() {
     filterBills();
   }, [searchQuery, bills, filterType, selectedDate]);
 
-  // Filter products when search query changes
+  // Filter products when search query or category changes
   useEffect(() => {
-    if (productSearchQuery.trim() === '') {
+    if (productSearchQuery.trim() === '' && selectedCategory === 'All') {
       setFilteredProducts(products);
     } else {
-      const filtered = products.filter(
-        (product: Product) =>
-          product.name
-            .toLowerCase()
-            .includes(productSearchQuery.toLowerCase()) ||
-          (product.categoryName &&
-            product.categoryName
+      let filtered = products;
+
+      if (selectedCategory !== 'All') {
+        filtered = filtered.filter(
+          (product: Product) =>
+            product.categoryId === parseInt(selectedCategory),
+        );
+      }
+
+      if (productSearchQuery.trim() !== '') {
+        filtered = filtered.filter(
+          (product: Product) =>
+            product.name
               .toLowerCase()
-              .includes(productSearchQuery.toLowerCase())),
-      );
+              .includes(productSearchQuery.toLowerCase()) ||
+            (product.categoryName &&
+              product.categoryName
+                .toLowerCase()
+                .includes(productSearchQuery.toLowerCase())),
+        );
+      }
+
       setFilteredProducts(filtered);
     }
-  }, [productSearchQuery, products]);
+  }, [productSearchQuery, products, selectedCategory]);
+
+  const loadCategories = async () => {
+    try {
+      const categoryList = await getAllCategories();
+      setCategories(categoryList);
+    } catch (error) {
+      console.error('Error loading categories:', error);
+    }
+  };
 
   const filterBills = () => {
     let filtered = [...bills];
@@ -379,6 +406,7 @@ export default function ViewBillsScreen() {
 
     setShowAddItemModal(false);
     setProductSearchQuery('');
+    setSelectedCategory('All');
   };
 
   const updateWholesaleRate = (productId: number, newRate: string) => {
@@ -633,39 +661,6 @@ export default function ViewBillsScreen() {
     );
   };
 
-  // Profit calculation functions
-  const getTotalCostPrice = () => {
-    const totalCost = cart.reduce((sum: number, item: CartItem) => {
-      return sum + item.purchasePrice * item.quantity;
-    }, 0);
-    return parseFloat(totalCost.toFixed(2));
-  };
-
-  const getProfitBeforeAnyDiscount = () => {
-    const subtotal = getSubtotal();
-    const totalCost = getTotalCostPrice();
-    return parseFloat((subtotal - totalCost).toFixed(2));
-  };
-
-  const getProfitAfterItemDiscount = () => {
-    const amountAfterItemDiscount = getAmountAfterItemDiscount();
-    const totalCost = getTotalCostPrice();
-    return parseFloat((amountAfterItemDiscount - totalCost).toFixed(2));
-  };
-
-  const getFinalProfit = () => {
-    const finalAmount = getFinalAmount();
-    const totalCost = getTotalCostPrice();
-    return parseFloat((finalAmount - totalCost).toFixed(2));
-  };
-
-  const getProfitMargin = () => {
-    const finalProfit = getFinalProfit();
-    const finalAmount = getFinalAmount();
-    if (finalAmount === 0) return 0;
-    return parseFloat(((finalProfit / finalAmount) * 100).toFixed(2));
-  };
-
   const handleUpdateBill = async () => {
     if (!selectedBill) return;
 
@@ -681,10 +676,8 @@ export default function ViewBillsScreen() {
       const totalItemDiscount = getTotalItemDiscount();
       const billDiscountAmount = getBillDiscountAmount();
       const finalAmount = getFinalAmount();
-      const finalProfit = getFinalProfit();
-      const profitMargin = getProfitMargin();
 
-      // Prepare cart items with detailed pricing information including purchase rate
+      // Prepare cart items with detailed pricing information
       const cartItems = cart.map((item: CartItem) => {
         const basePrice = item.customRate || item.sellPrice;
         const finalPrice = item.discountedPrice || basePrice;
@@ -698,7 +691,7 @@ export default function ViewBillsScreen() {
           name: item.name,
           quantity: item.quantity,
           rate: basePrice,
-          purchaseRate: item.purchasePrice, // Include purchase price for profit tracking
+          purchaseRate: item.purchasePrice,
           finalRate: finalPrice,
           discountPercent: discountPercent,
           discountAmount: itemDiscountAmount,
@@ -759,9 +752,7 @@ export default function ViewBillsScreen() {
         `✅ Bill Updated Successfully!\n\n` +
           `Bill #${selectedBill.id}\n` +
           `Customer: ${customerName}\n` +
-          `Final Amount: ₹${finalAmount.toFixed(2)}\n` +
-          `Net Profit: ₹${finalProfit.toFixed(2)}\n` +
-          `Profit Margin: ${profitMargin}%`,
+          `Final Amount: ₹${finalAmount.toFixed(2)}`,
       );
 
       setShowEditModal(false);
@@ -795,6 +786,12 @@ export default function ViewBillsScreen() {
   const getFilterCount = () => {
     if (filterType === 'All') return bills.length;
     return bills.filter((bill: Bill) => bill.billType === filterType).length;
+  };
+
+  // Get product MRP by item name
+  const getProductMRP = (itemName: string) => {
+    const product = products.find((p) => p.name === itemName);
+    return product ? product.mrp : null;
   };
 
   if (loading) {
@@ -1076,25 +1073,42 @@ export default function ViewBillsScreen() {
                 </View>
               </View>
 
-              {/* Bill Items Summary - Show ALL items */}
+              {/* Bill Items Summary - Show ALL items with MRP */}
               {bill.items && bill.items.length > 0 && (
                 <View style={styles.itemsSummary}>
                   <Text style={styles.itemsTitle}>
                     Items ({getTotalItems(bill)} items):
                   </Text>
-                  {bill.items.map((item: BillItem, index: number) => (
-                    <View key={index} style={styles.itemRow}>
-                      <Text style={styles.itemName} numberOfLines={1}>
-                        {item.itemName}
-                      </Text>
-                      <Text style={styles.itemDetails}>
-                        {item.quantity} × ₹{item.finalRate.toFixed(2)}
-                      </Text>
-                      <Text style={styles.itemTotal}>
-                        ₹{item.total.toFixed(2)}
-                      </Text>
-                    </View>
-                  ))}
+                  {bill.items.map((item: BillItem, index: number) => {
+                    const productMRP = getProductMRP(item.itemName);
+                    return (
+                      <View key={index} style={styles.itemRow}>
+                        <View style={styles.itemInfoContainer}>
+                          <Text style={styles.itemName} numberOfLines={1}>
+                            {item.itemName}
+                          </Text>
+                          <View style={styles.itemPriceRow}>
+                            {productMRP && (
+                              <Text style={styles.itemMrpText}>
+                                MRP: ₹{productMRP.toFixed(2)}
+                              </Text>
+                            )}
+                            <Text style={styles.itemRateText}>
+                              Rate: ₹{item.finalRate.toFixed(2)}
+                            </Text>
+                          </View>
+                        </View>
+                        <View style={styles.itemQuantityContainer}>
+                          <Text style={styles.itemDetails}>
+                            {item.quantity} × ₹{item.finalRate.toFixed(2)}
+                          </Text>
+                          <Text style={styles.itemTotal}>
+                            ₹{item.total.toFixed(2)}
+                          </Text>
+                        </View>
+                      </View>
+                    );
+                  })}
                 </View>
               )}
 
@@ -1115,15 +1129,6 @@ export default function ViewBillsScreen() {
                   )}
                 </View>
               )}
-
-              {/* Profit Display */}
-              {bill.totalProfit !== undefined && bill.totalProfit > 0 && (
-                <View style={styles.profitSummary}>
-                  <Text style={styles.profitText}>
-                    💰 Profit: {formatCurrency(bill.totalProfit)}
-                  </Text>
-                </View>
-              )}
             </View>
           ))
         )}
@@ -1140,19 +1145,36 @@ export default function ViewBillsScreen() {
           <LinearGradient
             colors={['#0F172A', '#1E3A8A', '#1D4ED8']}
             start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-            style={styles.modalHeader}
+            end={{ x: 1, y: 1 }}
+            style={styles.editModalHeader}
           >
-            <View style={styles.modalHeaderContent}>
-              <Text style={styles.modalTitle}>
-                Edit Bill #{selectedBill?.id}
-              </Text>
+            <View style={styles.editModalHeaderContent}>
               <TouchableOpacity
-                style={styles.closeButton}
+                style={styles.modalBackButton}
                 onPress={() => setShowEditModal(false)}
               >
-                <X size={24} color="#FFF" />
+                <ArrowLeft size={24} color="#FFFFFF" />
               </TouchableOpacity>
+              <View style={styles.modalHeaderCenter}>
+                <Edit3 size={24} color="#FFFFFF" />
+                <Text style={styles.editModalTitle}>
+                  Edit Bill #{selectedBill?.id}
+                </Text>
+              </View>
+              <View style={styles.modalHeaderRight} />
+            </View>
+            <View style={styles.editModalStats}>
+              <View style={styles.editStatItem}>
+                <Text style={styles.editStatValue}>{cart.length}</Text>
+                <Text style={styles.editStatLabel}>Items in Bill</Text>
+              </View>
+              <View style={styles.editStatDivider} />
+              <View style={styles.editStatItem}>
+                <Text style={styles.editStatValue}>
+                  {formatCurrency(getFinalAmount())}
+                </Text>
+                <Text style={styles.editStatLabel}>Total Amount</Text>
+              </View>
             </View>
           </LinearGradient>
 
@@ -1173,6 +1195,11 @@ export default function ViewBillsScreen() {
 
               <View style={styles.row}>
                 <View style={[styles.inputContainer, { flex: 1 }]}>
+                  <Calendar
+                    size={20}
+                    color="#64748B"
+                    style={styles.inputIcon}
+                  />
                   <TextInput
                     style={styles.input}
                     value={billingDate}
@@ -1219,7 +1246,7 @@ export default function ViewBillsScreen() {
               </View>
             </View>
 
-            {/* Cart Items */}
+            {/* Cart Items with MRP Display */}
             <View style={styles.section}>
               <View style={styles.cartHeader}>
                 <Text style={styles.sectionTitle}>
@@ -1241,8 +1268,6 @@ export default function ViewBillsScreen() {
                 const finalPrice = item.discountedPrice || basePrice;
                 const hasDiscount =
                   currentDiscount && parseFloat(currentDiscount) > 0;
-                const itemProfit =
-                  getItemTotal(item) - item.purchasePrice * item.quantity;
 
                 return (
                   <View key={item.id} style={styles.editCartItem}>
@@ -1250,8 +1275,11 @@ export default function ViewBillsScreen() {
                       <View style={styles.itemInfo}>
                         <Text style={styles.itemName}>{item.name}</Text>
                         <Text style={styles.itemStock}>
-                          Stock: {item.stock} {item.unit} | Cost: ₹
-                          {item.purchasePrice} | MRP: ₹{item.mrp}
+                          Stock: {item.stock} {item.unit}
+                        </Text>
+                        <Text style={styles.itemMrpInfo}>
+                          MRP: ₹{item.mrp.toFixed(2)} | Selling: ₹
+                          {item.sellPrice.toFixed(2)}
                         </Text>
                       </View>
                       <TouchableOpacity
@@ -1335,13 +1363,7 @@ export default function ViewBillsScreen() {
                     </View>
 
                     <View style={styles.itemTotalRow}>
-                      <View>
-                        <Text style={styles.itemTotalLabel}>Item Total:</Text>
-                        <Text style={styles.itemProfitLabel}>
-                          Profit: {itemProfit >= 0 ? '+' : ''}₹
-                          {itemProfit.toFixed(2)}
-                        </Text>
-                      </View>
+                      <Text style={styles.itemTotalLabel}>Item Total:</Text>
                       <Text style={styles.itemTotalAmount}>
                         {formatCurrency(getItemTotal(item))}
                       </Text>
@@ -1353,10 +1375,6 @@ export default function ViewBillsScreen() {
                           After {currentDiscount}% discount: ₹
                           {finalPrice.toFixed(2)} each
                         </Text>
-                        <Text style={styles.discountInfoText}>
-                          Discount Amount: -
-                          {formatCurrency(getItemDiscountAmount(item))}
-                        </Text>
                       </View>
                     )}
                   </View>
@@ -1364,7 +1382,7 @@ export default function ViewBillsScreen() {
               })}
             </View>
 
-            {/* Price and Profit Summary */}
+            {/* Price Summary */}
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Price Summary</Text>
               <View style={styles.priceSummary}>
@@ -1408,50 +1426,6 @@ export default function ViewBillsScreen() {
                     {formatCurrency(getFinalAmount())}
                   </Text>
                 </View>
-
-                {/* Profit Analysis Section */}
-                <View style={styles.profitSection}>
-                  <Text style={styles.profitSectionTitle}>Profit Analysis</Text>
-
-                  <View style={styles.summaryRow}>
-                    <Text style={styles.summaryLabel}>Total Cost:</Text>
-                    <Text style={styles.summaryValue}>
-                      {formatCurrency(getTotalCostPrice())}
-                    </Text>
-                  </View>
-
-                  <View style={styles.summaryRow}>
-                    <Text style={styles.summaryLabel}>
-                      Profit Before Discount:
-                    </Text>
-                    <Text style={[styles.summaryValue, styles.profitPositive]}>
-                      {formatCurrency(getProfitBeforeAnyDiscount())}
-                    </Text>
-                  </View>
-
-                  <View style={styles.summaryRow}>
-                    <Text style={styles.summaryLabel}>
-                      Profit After Item Disc:
-                    </Text>
-                    <Text style={[styles.summaryValue, styles.profitPositive]}>
-                      {formatCurrency(getProfitAfterItemDiscount())}
-                    </Text>
-                  </View>
-
-                  <View style={[styles.summaryRow, styles.finalProfitRow]}>
-                    <Text style={styles.finalProfitLabel}>Net Profit:</Text>
-                    <Text style={styles.finalProfitValue}>
-                      {formatCurrency(getFinalProfit())}
-                    </Text>
-                  </View>
-
-                  <View style={styles.summaryRow}>
-                    <Text style={styles.summaryLabel}>Profit Margin:</Text>
-                    <Text style={[styles.summaryValue, styles.profitPositive]}>
-                      {getProfitMargin()}%
-                    </Text>
-                  </View>
-                </View>
               </View>
             </View>
 
@@ -1484,79 +1458,184 @@ export default function ViewBillsScreen() {
         visible={showAddItemModal}
         animationType="slide"
         presentationStyle="pageSheet"
-        onRequestClose={() => setShowAddItemModal(false)}
+        onRequestClose={() => {
+          setShowAddItemModal(false);
+          setSelectedCategory('All');
+          setProductSearchQuery('');
+        }}
       >
         <View style={styles.modalContainer}>
           <LinearGradient
             colors={['#0F172A', '#1E3A8A', '#1D4ED8']}
             start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-            style={styles.modalHeader}
+            end={{ x: 1, y: 1 }}
+            style={styles.addItemModalHeader}
           >
-            <View style={styles.modalHeaderContent}>
-              <Text style={styles.modalTitle}>Add Items to Bill</Text>
+            <View style={styles.addItemModalHeaderContent}>
               <TouchableOpacity
-                style={styles.closeButton}
-                onPress={() => setShowAddItemModal(false)}
+                style={styles.modalBackButton}
+                onPress={() => {
+                  setShowAddItemModal(false);
+                  setSelectedCategory('All');
+                  setProductSearchQuery('');
+                }}
               >
-                <X size={24} color="#FFF" />
+                <ArrowLeft size={24} color="#FFFFFF" />
               </TouchableOpacity>
+              <View style={styles.modalHeaderCenter}>
+                <Package size={24} color="#FFFFFF" />
+                <Text style={styles.addItemModalTitle}>Add Items</Text>
+              </View>
+              <View style={styles.modalHeaderRight} />
+            </View>
+            <View style={styles.addItemHeaderStats}>
+              <View style={styles.addItemStatItem}>
+                <Text style={styles.addItemStatValue}>
+                  {filteredProducts.length}
+                </Text>
+                <Text style={styles.addItemStatLabel}>Products Available</Text>
+              </View>
+              <View style={styles.addItemStatDivider} />
+              <View style={styles.addItemStatItem}>
+                <Text style={styles.addItemStatValue}>{cart.length}</Text>
+                <Text style={styles.addItemStatLabel}>Items in Cart</Text>
+              </View>
             </View>
           </LinearGradient>
 
           <View style={styles.addItemModalContent}>
+            {/* Category Filter Chips */}
+            <View style={styles.categoryFilterWrapper}>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.categoryFilterContainer}
+              >
+                <TouchableOpacity
+                  style={[
+                    styles.categoryChip,
+                    selectedCategory === 'All' && styles.categoryChipActive,
+                  ]}
+                  onPress={() => setSelectedCategory('All')}
+                >
+                  <Text
+                    style={[
+                      styles.categoryChipText,
+                      selectedCategory === 'All' &&
+                        styles.categoryChipTextActive,
+                    ]}
+                  >
+                    All
+                  </Text>
+                </TouchableOpacity>
+                {categories.map((category) => (
+                  <TouchableOpacity
+                    key={category.id}
+                    style={[
+                      styles.categoryChip,
+                      selectedCategory === category.id.toString() &&
+                        styles.categoryChipActive,
+                    ]}
+                    onPress={() => setSelectedCategory(category.id.toString())}
+                  >
+                    <Text
+                      style={[
+                        styles.categoryChipText,
+                        selectedCategory === category.id.toString() &&
+                          styles.categoryChipTextActive,
+                      ]}
+                    >
+                      {category.name}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+
             {/* Search Bar */}
-            <View style={styles.searchContainer}>
+            <View style={styles.addItemSearchContainer}>
               <Search size={20} color="#64748B" />
               <TextInput
-                style={styles.searchInput}
-                placeholder="Search products by name or category..."
+                style={styles.addItemSearchInput}
+                placeholder="Search products by name..."
                 placeholderTextColor="#94A3B8"
                 value={productSearchQuery}
                 onChangeText={setProductSearchQuery}
               />
+              {productSearchQuery !== '' && (
+                <TouchableOpacity onPress={() => setProductSearchQuery('')}>
+                  <X size={20} color="#64748B" />
+                </TouchableOpacity>
+              )}
             </View>
 
-            {/* Products List */}
+            {/* Products List with MRP Display */}
             <FlatList
               data={filteredProducts}
               keyExtractor={(item) => item.id.toString()}
               renderItem={({ item }) => (
                 <TouchableOpacity
-                  style={styles.productItem}
+                  style={styles.addItemProductCard}
                   onPress={() => addItemToCart(item)}
+                  activeOpacity={0.7}
                 >
-                  <View style={styles.productInfo}>
-                    <Text style={styles.productName}>{item.name}</Text>
-                    <Text style={styles.productDetails}>
-                      {item.categoryName || 'Uncategorized'} | Stock:{' '}
-                      {item.stock} {item.unit}
-                    </Text>
-                    <View style={styles.productPricing}>
-                      <Text style={styles.productMrp}>MRP: ₹{item.mrp}</Text>
-                      <Text style={styles.productCost}>
-                        Cost: ₹{item.purchasePrice}
-                      </Text>
-                      <Text style={styles.productSellPrice}>
-                        Sell: ₹{item.sellPrice}
-                      </Text>
+                  <View style={styles.addItemProductRow}>
+                    <View style={styles.addItemProductIcon}>
+                      <Package size={22} color="#3B82F6" />
                     </View>
-                  </View>
-                  <View style={styles.addProductButton}>
-                    <Plus size={20} color="#FFF" />
+                    <View style={styles.addItemProductContent}>
+                      <Text style={styles.addItemProductName} numberOfLines={1}>
+                        {item.name}
+                      </Text>
+                      <Text style={styles.addItemProductCategory}>
+                        {item.categoryName || 'Uncategorized'}
+                      </Text>
+                      <View style={styles.addItemProductMeta}>
+                        <View style={styles.addItemStockBadge}>
+                          <Text style={styles.addItemStockText}>
+                            Stock: {item.stock} {item.unit}
+                          </Text>
+                        </View>
+                        <View style={styles.addItemMrpBadge}>
+                          <Text style={styles.addItemMrpText}>
+                            MRP: ₹{item.mrp}
+                          </Text>
+                        </View>
+                        <View style={styles.addItemPriceBadge}>
+                          <Text style={styles.addItemPriceText}>
+                            Sell: ₹{item.sellPrice}
+                          </Text>
+                        </View>
+                      </View>
+                    </View>
+                    <View style={styles.addItemProductAction}>
+                      <LinearGradient
+                        colors={['#3B82F6', '#1D4ED8']}
+                        style={styles.addItemAddButton}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 1 }}
+                      >
+                        <Plus size={18} color="#FFF" />
+                      </LinearGradient>
+                    </View>
                   </View>
                 </TouchableOpacity>
               )}
               ListEmptyComponent={
-                <View style={styles.emptyState}>
-                  <Text style={styles.emptyStateText}>No products found</Text>
-                  <Text style={styles.emptyStateSubtext}>
+                <View style={styles.addItemEmptyState}>
+                  <Package size={64} color="#CBD5E1" />
+                  <Text style={styles.addItemEmptyTitle}>
+                    No products found
+                  </Text>
+                  <Text style={styles.addItemEmptySubtitle}>
                     {productSearchQuery
                       ? 'Try a different search term'
-                      : 'No products available'}
+                      : 'No products available in this category'}
                   </Text>
                 </View>
               }
+              contentContainerStyle={styles.addItemListContent}
+              showsVerticalScrollIndicator={false}
             />
           </View>
         </View>
@@ -1589,7 +1668,9 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   backButton: {
-    padding: 4,
+    padding: 8,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    borderRadius: 12,
   },
   headerTitle: {
     fontSize: 24,
@@ -1598,14 +1679,14 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
   },
   headerRight: {
-    width: 32,
+    width: 40,
   },
   headerStats: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-around',
     backgroundColor: 'rgba(255,255,255,0.1)',
-    borderRadius: 16,
+    borderRadius: 20,
     paddingVertical: 12,
     paddingHorizontal: 16,
     marginHorizontal: 20,
@@ -1888,17 +1969,40 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 6,
+    flexWrap: 'wrap',
+  },
+  itemInfoContainer: {
+    flex: 2,
   },
   itemName: {
-    flex: 1,
     fontSize: 12,
     color: '#64748B',
     fontWeight: '500',
+    marginBottom: 2,
+  },
+  itemPriceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  itemMrpText: {
+    fontSize: 10,
+    color: '#D97706',
+    fontWeight: '500',
+  },
+  itemRateText: {
+    fontSize: 10,
+    color: '#10B981',
+    fontWeight: '500',
+  },
+  itemQuantityContainer: {
+    flex: 1,
+    alignItems: 'flex-end',
   },
   itemDetails: {
-    fontSize: 12,
+    fontSize: 11,
     color: '#64748B',
-    marginHorizontal: 8,
+    marginBottom: 2,
   },
   itemTotal: {
     fontSize: 12,
@@ -1919,48 +2023,13 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginBottom: 2,
   },
-  profitSummary: {
-    borderTopWidth: 1,
-    borderTopColor: '#F1F5F9',
-    paddingTop: 8,
-    marginTop: 8,
-  },
-  profitText: {
-    fontSize: 12,
-    color: '#10B981',
-    fontWeight: '700',
-  },
   modalContainer: {
     flex: 1,
     backgroundColor: '#F1F5F9',
   },
-  modalHeader: {
-    paddingTop: Platform.OS === 'ios' ? 58 : 44,
-    paddingBottom: 16,
-  },
-  modalHeaderContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: '#FFF',
-    letterSpacing: 0.3,
-  },
-  closeButton: {
-    padding: 4,
-  },
   modalContent: {
     flex: 1,
     padding: 20,
-  },
-  addItemModalContent: {
-    flex: 1,
-    padding: 16,
-    backgroundColor: '#F1F5F9',
   },
   section: {
     marginBottom: 24,
@@ -2082,6 +2151,12 @@ const styles = StyleSheet.create({
     color: '#64748B',
     marginTop: 2,
   },
+  itemMrpInfo: {
+    fontSize: 11,
+    color: '#D97706',
+    marginTop: 2,
+    fontWeight: '500',
+  },
   removeItemBtn: {
     backgroundColor: '#EF4444',
     width: 26,
@@ -2183,12 +2258,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#475569',
   },
-  itemProfitLabel: {
-    fontSize: 11,
-    color: '#10B981',
-    fontWeight: '600',
-    marginTop: 2,
-  },
   itemTotalAmount: {
     fontSize: 16,
     fontWeight: '700',
@@ -2228,9 +2297,6 @@ const styles = StyleSheet.create({
   discountValue: {
     color: '#EF4444',
   },
-  profitPositive: {
-    color: '#10B981',
-  },
   finalTotalRow: {
     borderTopWidth: 1,
     borderTopColor: '#E2E8F0',
@@ -2245,35 +2311,6 @@ const styles = StyleSheet.create({
   finalTotalValue: {
     fontSize: 17,
     color: '#0F172A',
-    fontWeight: '800',
-  },
-  profitSection: {
-    marginTop: 12,
-    paddingTop: 12,
-    borderTopWidth: 2,
-    borderTopColor: '#10B981',
-  },
-  profitSectionTitle: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#059669',
-    marginBottom: 8,
-    textAlign: 'center',
-  },
-  finalProfitRow: {
-    marginTop: 8,
-    paddingTop: 8,
-    borderTopWidth: 1,
-    borderTopColor: '#E2E8F0',
-  },
-  finalProfitLabel: {
-    fontSize: 14,
-    color: '#059669',
-    fontWeight: '800',
-  },
-  finalProfitValue: {
-    fontSize: 15,
-    color: '#059669',
     fontWeight: '800',
   },
   updateButton: {
@@ -2293,58 +2330,294 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
   },
-  productItem: {
+
+  // Edit Modal Styles
+  editModalHeader: {
+    paddingTop: Platform.OS === 'ios' ? 58 : 44,
+    paddingBottom: 20,
+    borderBottomLeftRadius: 32,
+    borderBottomRightRadius: 32,
+    elevation: 12,
+    shadowColor: '#1E3A8A',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.35,
+    shadowRadius: 20,
+  },
+  editModalHeaderContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFF',
-    padding: 14,
-    marginBottom: 10,
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    marginBottom: 16,
+  },
+  modalBackButton: {
+    padding: 8,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    borderRadius: 12,
+  },
+  modalHeaderCenter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  editModalTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    letterSpacing: 0.3,
+  },
+  modalHeaderRight: {
+    width: 44,
+  },
+  editModalStats: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-around',
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 20,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    marginHorizontal: 20,
+  },
+  editStatItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  editStatValue: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    marginBottom: 4,
+  },
+  editStatLabel: {
+    fontSize: 10,
+    color: '#93C5FD',
+    fontWeight: '500',
+  },
+  editStatDivider: {
+    width: 1,
+    height: 30,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+  },
+
+  // Add Item Modal Styles
+  addItemModalHeader: {
+    paddingTop: Platform.OS === 'ios' ? 58 : 44,
+    paddingBottom: 20,
+    borderBottomLeftRadius: 32,
+    borderBottomRightRadius: 32,
+    elevation: 12,
+    shadowColor: '#1E3A8A',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.35,
+    shadowRadius: 20,
+  },
+  addItemModalHeaderContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    marginBottom: 16,
+  },
+  addItemModalTitle: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    letterSpacing: 0.5,
+  },
+  addItemHeaderStats: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-around',
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 20,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    marginHorizontal: 20,
+  },
+  addItemStatItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  addItemStatValue: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    marginBottom: 4,
+  },
+  addItemStatLabel: {
+    fontSize: 11,
+    color: '#93C5FD',
+    fontWeight: '500',
+  },
+  addItemStatDivider: {
+    width: 1,
+    height: 30,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+  },
+  addItemModalContent: {
+    flex: 1,
+    padding: 16,
+    backgroundColor: '#F1F5F9',
+  },
+  categoryFilterWrapper: {
+    marginBottom: 16,
+  },
+  categoryFilterContainer: {
+    flexDirection: 'row',
+    paddingHorizontal: 4,
+    paddingVertical: 4,
+  },
+  categoryChip: {
+    paddingHorizontal: 18,
+    paddingVertical: 8,
+    borderRadius: 24,
+    backgroundColor: '#FFFFFF',
+    marginRight: 10,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  categoryChipActive: {
+    backgroundColor: '#3B82F6',
+    borderColor: '#3B82F6',
+  },
+  categoryChipText: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: '#475569',
+  },
+  categoryChipTextActive: {
+    color: '#FFFFFF',
+  },
+  addItemSearchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    marginBottom: 16,
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    shadowColor: '#94A3B8',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  addItemSearchInput: {
+    flex: 1,
+    marginLeft: 12,
+    fontSize: 15,
+    color: '#0F172A',
+  },
+  addItemListContent: {
+    paddingBottom: 30,
+  },
+  addItemProductCard: {
+    backgroundColor: '#FFFFFF',
     borderRadius: 14,
+    marginBottom: 10,
+    padding: 12,
     borderWidth: 1,
     borderColor: '#F1F5F9',
     shadowColor: '#94A3B8',
-    shadowOffset: { width: 0, height: 1 },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
+    shadowRadius: 4,
+    elevation: 2,
   },
-  productInfo: {
+  addItemProductRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  addItemProductIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#EFF6FF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  addItemProductContent: {
     flex: 1,
   },
-  productName: {
+  addItemProductName: {
     fontSize: 15,
-    fontWeight: '700',
+    fontWeight: '600',
     color: '#0F172A',
     marginBottom: 4,
   },
-  productDetails: {
+  addItemProductCategory: {
     fontSize: 11,
     color: '#64748B',
-    marginBottom: 4,
+    marginBottom: 6,
   },
-  productPricing: {
+  addItemProductMeta: {
     flexDirection: 'row',
-    gap: 12,
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 6,
   },
-  productMrp: {
-    fontSize: 11,
+  addItemStockBadge: {
+    backgroundColor: '#F1F5F9',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 12,
+  },
+  addItemStockText: {
+    fontSize: 10,
     color: '#64748B',
+    fontWeight: '500',
   },
-  productCost: {
-    fontSize: 11,
-    color: '#EF4444',
+  addItemMrpBadge: {
+    backgroundColor: '#FEF3C7',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 12,
   },
-  productSellPrice: {
+  addItemMrpText: {
+    fontSize: 10,
+    color: '#D97706',
+    fontWeight: '500',
+  },
+  addItemPriceBadge: {
+    backgroundColor: '#DCFCE7',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 12,
+  },
+  addItemPriceText: {
     fontSize: 11,
-    color: '#10B981',
     fontWeight: '600',
+    color: '#10B981',
   },
-  addProductButton: {
-    backgroundColor: '#3B82F6',
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+  addItemProductAction: {
+    marginLeft: 8,
+  },
+  addItemAddButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  addItemEmptyState: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 60,
+  },
+  addItemEmptyTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#64748B',
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  addItemEmptySubtitle: {
+    fontSize: 14,
+    color: '#94A3B8',
+    textAlign: 'center',
   },
 });

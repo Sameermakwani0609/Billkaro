@@ -1,4 +1,4 @@
-import * as FileSystem from 'expo-file-system/legacy'; // ← the only import change needed
+import * as FileSystem from 'expo-file-system/legacy';
 import * as SQLite from 'expo-sqlite';
 import { Platform } from 'react-native';
 
@@ -192,6 +192,30 @@ export type PartySummaryBill = {
   totalAmount: number;
 };
 
+// --- Activation Types ---
+export type ActivationPlan = {
+  id: number;
+  planName: string;
+  duration: number;
+  price: number;
+  keyPrefix: string;
+};
+
+export type Activation = {
+  id: number;
+  activationKey: string;
+  planId: number;
+  planName: string;
+  duration: number;
+  startDate: string;
+  endDate: string;
+  isActive: boolean;
+  deviceId: string;
+  deviceName: string;
+  activatedBy: string;
+  createdAt: string;
+};
+
 // --- Database ---
 let db: SQLite.SQLiteDatabase | null = null;
 let isInitialized = false;
@@ -346,6 +370,24 @@ export function initDB() {
       );
     `);
 
+    // CREATE ACTIVATION TABLE
+    db.execSync(`
+      CREATE TABLE IF NOT EXISTS activations (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        activationKey TEXT UNIQUE NOT NULL,
+        planId INTEGER NOT NULL,
+        planName TEXT NOT NULL,
+        duration INTEGER NOT NULL,
+        startDate TEXT NOT NULL,
+        endDate TEXT NOT NULL,
+        isActive INTEGER DEFAULT 1,
+        deviceId TEXT NOT NULL,
+        deviceName TEXT NOT NULL,
+        activatedBy TEXT NOT NULL,
+        createdAt TEXT DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
     // Migrations
     try {
       const tableInfo = db!.getAllSync<any>('PRAGMA table_info(bill_items)');
@@ -441,9 +483,7 @@ function ensureDBInitialized() {
   }
 }
 
-// --- FIXED Backup and Restore Functions ---
-
-// Helper — collects all rows from every table
+// --- Backup and Restore Functions ---
 const getAllTableData = async () => {
   const tables = [
     'customers',
@@ -456,6 +496,7 @@ const getAllTableData = async () => {
     'purchase_bills',
     'purchase_items',
     'app_settings',
+    'activations',
   ];
   const data: Record<string, any[]> = {};
   for (const table of tables) {
@@ -468,8 +509,6 @@ const getAllTableData = async () => {
   return data;
 };
 
-// ─── Backup ───────────────────────────────────────────────────────────────────
-// Returns a blob URL on web, or a file URI on native.
 export const backupDatabase = async (): Promise<string> => {
   ensureDBInitialized();
   if (!db) throw new Error('Database not initialised');
@@ -486,7 +525,6 @@ export const backupDatabase = async (): Promise<string> => {
     return URL.createObjectURL(blob);
   }
 
-  // Native — documentDirectory is always writable, no permissions needed
   const fileUri = `${FileSystem.documentDirectory}backup_${Date.now()}.json`;
   await FileSystem.writeAsStringAsync(fileUri, payload, {
     encoding: FileSystem.EncodingType.UTF8,
@@ -494,8 +532,6 @@ export const backupDatabase = async (): Promise<string> => {
   return fileUri;
 };
 
-// ─── Restore ──────────────────────────────────────────────────────────────────
-// Accepts a blob URL (web) or a file URI (native).
 export const restoreDatabase = async (backupPath: string): Promise<void> => {
   ensureDBInitialized();
   if (!db) throw new Error('Database not initialised');
@@ -515,7 +551,6 @@ export const restoreDatabase = async (backupPath: string): Promise<void> => {
   const backup = JSON.parse(payload);
   if (!backup?.data) throw new Error('Invalid backup: missing "data" field');
 
-  // FK-safe deletion order
   const deleteOrder = [
     'payments',
     'bill_items',
@@ -527,10 +562,10 @@ export const restoreDatabase = async (backupPath: string): Promise<void> => {
     'suppliers',
     'customers',
     'app_settings',
+    'activations',
   ];
 
   db!.withTransactionSync(() => {
-    // 1. Clear tables
     for (const table of deleteOrder) {
       try {
         db!.execSync(`DELETE FROM ${table}`);
@@ -540,7 +575,6 @@ export const restoreDatabase = async (backupPath: string): Promise<void> => {
       }
     }
 
-    // 2. Re-insert rows
     for (const [table, rows] of Object.entries(backup.data) as [
       string,
       any[],
@@ -1158,7 +1192,6 @@ export function getBills(): Promise<Bill[]> {
 }
 
 // --- Payment Functions ---
-
 export function insertPayment(
   billId: number,
   customerId: number,
@@ -1421,7 +1454,6 @@ export function getCustomerPaymentHistory(
 }
 
 // --- Customer Statement Functions ---
-
 export function getCustomerStatement(
   customerId: number,
   startDate: string,
@@ -2434,4 +2466,321 @@ export const saveAppSettings = async (settings: AppSettings): Promise<void> => {
     console.error('Error saving app settings:', error);
     throw error;
   }
+};
+
+// ==================== ACTIVATION FUNCTIONS ====================
+
+// Plans definition
+export const ACTIVATION_PLANS = [
+  {
+    id: 1,
+    planName: '1 Month Plan',
+    duration: 30,
+    price: 200,
+    keyPrefix: 'MTH',
+  },
+  {
+    id: 2,
+    planName: '6 Months Plan',
+    duration: 180,
+    price: 1499,
+    keyPrefix: 'SIX',
+  },
+  {
+    id: 3,
+    planName: '3 Years Plan',
+    duration: 1095,
+    price: 7000,
+    keyPrefix: 'YER',
+  },
+];
+
+// Generate activation key (ADMIN ONLY)
+export function generateActivationKey(planId: number): string {
+  const plan = ACTIVATION_PLANS.find((p) => p.id === planId);
+  if (!plan) return '';
+
+  const timestamp = Date.now();
+  const random = Math.random().toString(36).substring(2, 10).toUpperCase();
+
+  const dataToHash = `${plan.keyPrefix}-${timestamp}-${random}`;
+  let hash = 0;
+  for (let i = 0; i < dataToHash.length; i++) {
+    hash = (hash << 5) - hash + dataToHash.charCodeAt(i);
+    hash = hash & hash;
+  }
+  const hashStr = Math.abs(hash).toString(36).substring(0, 8).toUpperCase();
+
+  return `${plan.keyPrefix}-${random}-${hashStr}`;
+}
+
+// Validate and activate key (USER)
+export function validateAndActivateKey(
+  activationKey: string,
+  deviceId: string,
+  deviceName: string,
+): {
+  success: boolean;
+  message: string;
+  plan?: any;
+  endDate?: string;
+  daysAdded?: number;
+} {
+  ensureDBInitialized();
+
+  try {
+    // Check if key already used
+    const existing = db!.getAllSync<any>(
+      'SELECT * FROM activations WHERE activationKey = ?',
+      [activationKey],
+    );
+
+    if (existing.length > 0) {
+      return {
+        success: false,
+        message: 'This activation key has already been used',
+      };
+    }
+
+    // Parse the key to determine plan
+    const keyParts = activationKey.split('-');
+    if (keyParts.length !== 3) {
+      return { success: false, message: 'Invalid activation key format' };
+    }
+
+    let planId: number;
+    const planPrefix = keyParts[0];
+    if (planPrefix === 'MTH') planId = 1;
+    else if (planPrefix === 'SIX') planId = 2;
+    else if (planPrefix === 'YER') planId = 3;
+    else return { success: false, message: 'Invalid activation key' };
+
+    const plan = ACTIVATION_PLANS.find((p) => p.id === planId);
+    if (!plan) return { success: false, message: 'Invalid plan' };
+
+    // Check if there's an existing activation to extend
+    const currentActivation = db!.getAllSync<any>(
+      'SELECT * FROM activations WHERE isActive = 1 ORDER BY id DESC LIMIT 1',
+    );
+
+    let startDate = new Date();
+    let endDate = new Date();
+
+    if (
+      currentActivation.length > 0 &&
+      new Date(currentActivation[0].endDate) > new Date()
+    ) {
+      // Extend existing activation
+      startDate = new Date(currentActivation[0].endDate);
+      endDate = new Date(startDate);
+      endDate.setDate(endDate.getDate() + plan.duration);
+
+      // Deactivate old activation - FIXED ✅
+      const deactivateStmt = db!.prepareSync(
+        'UPDATE activations SET isActive = 0 WHERE id = ?',
+      );
+      deactivateStmt.executeSync([currentActivation[0].id]);
+      deactivateStmt.finalizeSync();
+    } else {
+      // New activation
+      endDate.setDate(endDate.getDate() + plan.duration);
+    }
+
+    // Save activation
+    const stmt = db!.prepareSync(`
+      INSERT INTO activations (activationKey, planId, planName, duration, startDate, endDate, isActive, deviceId, deviceName, activatedBy)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    stmt.executeSync([
+      activationKey,
+      planId,
+      plan.planName,
+      plan.duration,
+      startDate.toISOString(),
+      endDate.toISOString(),
+      1,
+      deviceId,
+      deviceName,
+      'User',
+    ]);
+    stmt.finalizeSync();
+
+    const daysAdded = Math.ceil(
+      (endDate.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24),
+    );
+
+    return {
+      success: true,
+      message: `✅ Successfully activated!\n\n📋 Plan: ${plan.planName}\n📅 Valid until: ${endDate.toLocaleDateString()}\n➕ ${daysAdded} days added to your license`,
+      plan,
+      endDate: endDate.toLocaleDateString(),
+      daysAdded,
+    };
+  } catch (error) {
+    console.error('Error validating activation key:', error);
+    return { success: false, message: 'Error validating activation key' };
+  }
+}
+
+// Get current activation status
+export function getCurrentActivation(): {
+  isValid: boolean;
+  plan?: string;
+  daysLeft?: number;
+  endDate?: string;
+  activatedBy?: string;
+} | null {
+  ensureDBInitialized();
+
+  try {
+    const result = db!.getAllSync<any>(
+      'SELECT * FROM activations WHERE isActive = 1 ORDER BY id DESC LIMIT 1',
+    );
+
+    if (result.length === 0) return null;
+
+    const activation = result[0];
+    const endDate = new Date(activation.endDate);
+    const now = new Date();
+
+    if (endDate < now) {
+      // Deactivate expired activation - FIXED ✅
+      const deactivateStmt = db!.prepareSync(
+        'UPDATE activations SET isActive = 0 WHERE id = ?',
+      );
+      deactivateStmt.executeSync([activation.id]);
+      deactivateStmt.finalizeSync();
+      return { isValid: false };
+    }
+
+    const daysLeft = Math.ceil(
+      (endDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24),
+    );
+
+    return {
+      isValid: true,
+      plan: activation.planName,
+      daysLeft,
+      endDate: endDate.toLocaleDateString(),
+      activatedBy: activation.activatedBy,
+    };
+  } catch (error) {
+    console.error('Error getting activation:', error);
+    return null;
+  }
+}
+
+// Get installation date
+export function getInstallationDate(): Date | null {
+  ensureDBInitialized();
+
+  try {
+    const result = db!.getAllSync<any>(
+      "SELECT value FROM app_settings WHERE key = 'installationDate'",
+    );
+
+    if (result.length > 0) {
+      return new Date(JSON.parse(result[0].value));
+    }
+
+    const installDate = new Date();
+    const stmt = db!.prepareSync(`
+      INSERT INTO app_settings (key, value) VALUES (?, ?)
+      ON CONFLICT(key) DO UPDATE SET value = excluded.value
+    `);
+    stmt.executeSync([
+      'installationDate',
+      JSON.stringify(installDate.toISOString()),
+    ]);
+    stmt.finalizeSync();
+
+    return installDate;
+  } catch (error) {
+    console.error('Error getting installation date:', error);
+    return new Date();
+  }
+}
+
+// Check trial status (30 days free)
+export function getTrialStatus(): {
+  isActive: boolean;
+  daysLeft: number;
+  startDate: Date;
+  endDate: Date;
+} {
+  const installDate = getInstallationDate();
+  if (!installDate) {
+    return {
+      isActive: true,
+      daysLeft: 30,
+      startDate: new Date(),
+      endDate: new Date(),
+    };
+  }
+
+  const endDate = new Date(installDate);
+  endDate.setDate(endDate.getDate() + 30);
+  const now = new Date();
+  const daysLeft = Math.max(
+    0,
+    Math.ceil((endDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)),
+  );
+
+  return {
+    isActive: daysLeft > 0,
+    daysLeft,
+    startDate: installDate,
+    endDate,
+  };
+}
+
+// Check if app is accessible
+export function isAppAccessible(): {
+  accessible: boolean;
+  message: string;
+  daysLeft?: number;
+  type?: 'trial' | 'activated' | 'expired';
+} {
+  const activation = getCurrentActivation();
+
+  if (activation && activation.isValid) {
+    return {
+      accessible: true,
+      message: `Activated - ${activation.daysLeft} days remaining`,
+      daysLeft: activation.daysLeft,
+      type: 'activated',
+    };
+  }
+
+  const trial = getTrialStatus();
+  if (trial.isActive) {
+    return {
+      accessible: true,
+      message: `Trial - ${trial.daysLeft} days remaining`,
+      daysLeft: trial.daysLeft,
+      type: 'trial',
+    };
+  }
+
+  return {
+    accessible: false,
+    message: 'Your trial has expired. Please purchase a license to continue.',
+    type: 'expired',
+  };
+}
+// Add to lib/db.ts
+export const getAllPayments = (): Promise<Payment[]> => {
+  return new Promise((resolve) => {
+    try {
+      ensureDBInitialized();
+      const result = db!.getAllSync<any>(
+        'SELECT * FROM payments ORDER BY paymentDate DESC, id DESC;',
+      );
+      resolve(result);
+    } catch (error) {
+      console.error('Error getting payments:', error);
+      resolve([]);
+    }
+  });
 };
