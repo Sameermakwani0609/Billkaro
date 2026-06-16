@@ -308,28 +308,39 @@ export default function Dashboard() {
     return { todayTotal, yesterdayTotal, percentage };
   };
 
-  // ── license check ─────────────────────────────────────────────
   const checkLicenseAccess = () => {
     try {
       const { accessible, daysLeft, type } = isAppAccessible();
       if (!accessible) {
+        // Use replace instead of push - this prevents going back
         Alert.alert(
           'License Expired',
           'Your trial period has ended. Please purchase a license to continue.',
-          [{ text: 'Activate Now', onPress: () => router.push('/activation') }],
+          [
+            {
+              text: 'Activate Now',
+              onPress: () => router.replace('/activation'), // ← Changed to replace
+            },
+          ],
           { cancelable: false },
         );
+        setLicenseChecked(false); // ← Added this
+        return;
       } else if (daysLeft && daysLeft <= 5 && type === 'trial') {
         Alert.alert(
           'Trial Expiring Soon',
-          `Your trial will expire in ${daysLeft} days.`,
+          `Your trial will expire in ${daysLeft} days. Please activate your license.`,
           [
             { text: 'Remind Later', style: 'cancel' },
-            { text: 'Activate Now', onPress: () => router.push('/activation') },
+            {
+              text: 'Activate Now',
+              onPress: () => router.replace('/activation'),
+            }, // ← Changed to replace
           ],
         );
       }
-    } catch {
+    } catch (error) {
+      console.error('License check error:', error);
     } finally {
       setLicenseChecked(true);
     }
@@ -625,11 +636,10 @@ export default function Dashboard() {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#3B82F6" />
-        <Text style={styles.loadingText}>Loading dashboard...</Text>
+        <Text style={styles.loadingText}>Checking license...</Text>
       </View>
     );
   }
-
   // ════════════════════════════════════════════════════════════════
   return (
     <View style={styles.container}>
