@@ -1,10 +1,10 @@
 {
   "expo": {
-    "name": "bill-karo",
+    "name": "Bill-Karo ",
     "slug": "bill-karo",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/images/billkaro.png",
     "scheme": "myapp",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
